@@ -63,8 +63,17 @@ impl TreeColorCache {
     }
 }
 
+#[derive(Default)]
+struct StatusLineCache {
+    last_sec: i64,
+    last_weather_str: String,
+    last_season: Option<Season>,
+    cached_status_line: String,
+}
+
 thread_local! {
     static TREE_COLOR_CACHE: RefCell<TreeColorCache> = RefCell::new(TreeColorCache::default());
+    static STATUS_CACHE: RefCell<StatusLineCache> = RefCell::new(StatusLineCache::default());
 }
 
 #[inline]
@@ -384,17 +393,30 @@ pub fn render_ui(
             .alignment(Alignment::Center)
             .style(Style::default().fg(Color::Rgb(136, 192, 208)).bg(nord_bg).add_modifier(Modifier::BOLD))
     } else {
-        let now = Local::now();
-        let date_str = now.format("%A %d/%m/%Y").to_string();
-        let weather_str = weather.get_weather_info();
-        let season_str = match season {
-            Season::Spring => "Spring",
-            Season::Summer => "Summer",
-            Season::Autumn => "Autumn",
-            Season::Winter => "Winter",
-            Season::Auto => "Auto",
-        };
-        let status_line = format!("{}  │  {}  │  {}", date_str, weather_str, season_str);
+        let status_line = STATUS_CACHE.with(|cache_cell| {
+            let mut cache = cache_cell.borrow_mut();
+            let now = Local::now();
+            let cur_sec = now.timestamp();
+            let weather_str = weather.get_weather_info();
+
+            if cache.last_sec != cur_sec || cache.last_season != Some(season) || cache.last_weather_str != weather_str {
+                let date_str = now.format("%A %d/%m/%Y");
+                let season_str = match season {
+                    Season::Spring => "Spring",
+                    Season::Summer => "Summer",
+                    Season::Autumn => "Autumn",
+                    Season::Winter => "Winter",
+                    Season::Auto => "Auto",
+                };
+                cache.cached_status_line = format!("{}  │  {}  │  {}", date_str, weather_str, season_str);
+                cache.last_sec = cur_sec;
+                cache.last_season = Some(season);
+                cache.last_weather_str = weather_str;
+            }
+
+            cache.cached_status_line.clone()
+        });
+
         Paragraph::new(status_line)
             .alignment(Alignment::Center)
             .style(Style::default().fg(Color::Rgb(129, 161, 193)).bg(nord_bg).add_modifier(Modifier::BOLD))
@@ -776,10 +798,11 @@ fn render_about_modal(f: &mut Frame, area: Rect, _config: &AppConfig) {
         ("o, f", "Weather Forecast Pop-up"),
         ("r", "Refresh Live Weather Data"),
         ("g", "Trigger Wind Gust Surge"),
-        ("w", "Cycle Wind Sway Intensity"),
         ("a, ?", "Toggle About Overlay"),
         ("q, Esc", "Quit Screensaver"),
     ];
+
+    let is_compact = area.height < 18;
 
     let mut lines = vec![
         Line::from(vec![
@@ -792,14 +815,23 @@ fn render_about_modal(f: &mut Frame, area: Rect, _config: &AppConfig) {
             Span::styled("Design: ", Style::default().fg(Color::Rgb(129, 161, 193)).add_modifier(Modifier::BOLD)),
             Span::styled("Antigravity", Style::default().fg(Color::Rgb(229, 233, 240))),
         ]).alignment(Alignment::Center),
-        Line::from(""),
+    ];
+
+    if !is_compact {
+        lines.push(Line::from(""));
+    }
+
+    lines.push(
         Line::from(vec![
             Span::styled("──────────── ", Style::default().fg(Color::Rgb(94, 129, 172))),
             Span::styled("Keyboard Shortcuts", Style::default().fg(Color::Rgb(143, 188, 187)).add_modifier(Modifier::BOLD)),
             Span::styled(" ────────────", Style::default().fg(Color::Rgb(94, 129, 172))),
         ]).alignment(Alignment::Center),
-        Line::from(""),
-    ];
+    );
+
+    if !is_compact {
+        lines.push(Line::from(""));
+    }
 
     for (keys, desc) in shortcuts {
         lines.push(Line::from(vec![
@@ -828,6 +860,7 @@ fn render_about_modal(f: &mut Frame, area: Rect, _config: &AppConfig) {
 fn render_weather_modal(f: &mut Frame, area: Rect, weather: &WeatherFetcher, _config: &AppConfig) {
     let snapshot = weather.get_detailed_snapshot();
     let mut lines = Vec::new();
+    let is_compact = area.height < 24;
 
     // 1. Header Title
     lines.push(
@@ -863,7 +896,9 @@ fn render_weather_modal(f: &mut Frame, area: Rect, weather: &WeatherFetcher, _co
         .alignment(Alignment::Center),
     );
 
-    lines.push(Line::from(""));
+    if !is_compact {
+        lines.push(Line::from(""));
+    }
 
     // 3. Current Live Telemetry Block
     if let Some(ref cur) = snapshot.primary {
@@ -892,7 +927,9 @@ fn render_weather_modal(f: &mut Frame, area: Rect, weather: &WeatherFetcher, _co
             ])
         );
 
-        lines.push(Line::from(""));
+        if !is_compact {
+            lines.push(Line::from(""));
+        }
 
         // 4. Multi-Day Outlook Table
         if !cur.daily.is_empty() {
@@ -923,7 +960,9 @@ fn render_weather_modal(f: &mut Frame, area: Rect, weather: &WeatherFetcher, _co
                     ])
                 );
             }
-            lines.push(Line::from(""));
+            if !is_compact {
+                lines.push(Line::from(""));
+            }
         }
     } else {
         lines.push(
@@ -932,27 +971,31 @@ fn render_weather_modal(f: &mut Frame, area: Rect, weather: &WeatherFetcher, _co
             ])
             .alignment(Alignment::Center),
         );
-        lines.push(Line::from(""));
+        if !is_compact {
+            lines.push(Line::from(""));
+        }
     }
 
     // 5. Comparative Station Block (Santiago)
-    if let Some(ref stgo) = snapshot.santiago {
-        let (stgo_badge, stgo_desc) = weathercode_description(stgo.weathercode);
-        lines.push(
-            Line::from(vec![
-                Span::styled("  ── Regional Comparative Station ───────────────────────────────────────────", Style::default().fg(Color::Rgb(94, 129, 172))),
-            ])
-        );
-        lines.push(
-            Line::from(vec![
-                Span::styled("  Santiago Capital:    ", Style::default().fg(Color::Rgb(129, 161, 193)).add_modifier(Modifier::BOLD)),
-                Span::styled(format!("{:.1}°C", stgo.temp), Style::default().fg(Color::Rgb(235, 203, 139)).add_modifier(Modifier::BOLD)),
-                Span::styled("   │  Condition: ", Style::default().fg(Color::Rgb(94, 129, 172))),
-                Span::styled(format!("{} {}", stgo_badge, stgo_desc), Style::default().fg(Color::Rgb(143, 188, 187))),
-                Span::styled(format!("  │  Wind: {:.1} km/h", stgo.wind_speed), Style::default().fg(Color::Rgb(216, 222, 233))),
-            ])
-        );
-        lines.push(Line::from(""));
+    if !is_compact {
+        if let Some(ref stgo) = snapshot.santiago {
+            let (stgo_badge, stgo_desc) = weathercode_description(stgo.weathercode);
+            lines.push(
+                Line::from(vec![
+                    Span::styled("  ── Regional Comparative Station ───────────────────────────────────────────", Style::default().fg(Color::Rgb(94, 129, 172))),
+                ])
+            );
+            lines.push(
+                Line::from(vec![
+                    Span::styled("  Santiago Capital:    ", Style::default().fg(Color::Rgb(129, 161, 193)).add_modifier(Modifier::BOLD)),
+                    Span::styled(format!("{:.1}°C", stgo.temp), Style::default().fg(Color::Rgb(235, 203, 139)).add_modifier(Modifier::BOLD)),
+                    Span::styled("   │  Condition: ", Style::default().fg(Color::Rgb(94, 129, 172))),
+                    Span::styled(format!("{} {}", stgo_badge, stgo_desc), Style::default().fg(Color::Rgb(143, 188, 187))),
+                    Span::styled(format!("  │  Wind: {:.1} km/h", stgo.wind_speed), Style::default().fg(Color::Rgb(216, 222, 233))),
+                ])
+            );
+            lines.push(Line::from(""));
+        }
     }
 
     // 6. Navigation Footer

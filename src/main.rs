@@ -146,10 +146,6 @@ fn main() -> Result<()> {
                             KeyCode::Char('g') | KeyCode::Char('G') => {
                                 particles.trigger_gust();
                             }
-                            KeyCode::Char('w') | KeyCode::Char('W') => {
-                                particles.cycle_sway();
-                                config.sway = particles.sway;
-                            }
                             _ => {}
                         }
                     }

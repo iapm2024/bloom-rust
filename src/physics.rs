@@ -290,27 +290,18 @@ impl ParticleEngine {
         self.set_feedback("Wind Gust Surge Triggered");
     }
 
-    pub fn cycle_sway(&mut self) {
-        let (new_sway, label) = if self.sway < 0.8 {
-            (1.0, "1.0x (Moderate Breeze)")
-        } else if self.sway < 1.8 {
-            (2.2, "2.2x (Blustery Gale)")
-        } else if self.sway < 2.8 {
-            (3.5, "3.5x (Stormy Gusts)")
-        } else {
-            (0.5, "0.5x (Calm Drift)")
-        };
-        self.sway = new_sway;
-        self.sway_amplitude = new_sway * 1.5;
-        self.set_feedback(format!("Wind Sway: {}", label));
-    }
-
     pub fn resize(&mut self, width: u16, height: u16) {
         self.width = width;
         self.height = height;
         self.terrain.resize(width, height);
+        let max_w = width.saturating_sub(1) as f32;
+        let max_h = height.saturating_sub(1) as f32;
+        for p in &mut self.leaves {
+            p.x = p.x.clamp(0.0, max_w);
+            p.y = p.y.clamp(0.0, max_h);
+        }
         self.settled.retain(|s| s.x < width && s.y < height);
-        self.wind_streaks.retain(|w| w.x < width as f32 && w.y < height as f32);
+        self.wind_streaks.retain(|w| w.x < max_w && w.y < max_h);
     }
 
     fn spawn_initial(&mut self, tree_grid: &[Vec<char>]) {

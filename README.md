@@ -66,7 +66,6 @@ Options:
 | `o` / `f` | Toggle **Weather & Forecast Pop-Up Modal** |
 | `r` / `R` | Force **Live Weather Telemetry Refresh** |
 | `g` / `G` | Trigger instant **Wind Gust Surge** |
-| `w` / `W` | Cycle **Wind Sway Magnitude** (Calm / Moderate / Blustery / Stormy) |
 | `a` / `?` | Toggle About & Shortcuts overlay |
 | `q` / `Esc` | Quit screensaver |
 
