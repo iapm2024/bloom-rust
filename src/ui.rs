@@ -9,7 +9,7 @@ use ratatui::{
 use crate::config::{AppConfig, Hemisphere, Mood, Season};
 use crate::physics::{Leaf, LeafState, ParallaxLayer, ParticleEngine};
 use crate::stars::StarrySky;
-use crate::weather::{weathercode_description, WeatherCondition, WeatherFetcher, WeatherFxEngine, WeatherFxKind};
+use crate::weather::{weathercode_full_name, weathercode_short_name, WeatherCondition, WeatherFetcher, WeatherFxEngine, WeatherFxKind};
 use chrono::{Datelike, Local};
 
 use std::cell::RefCell;
@@ -888,13 +888,13 @@ fn render_weather_modal(f: &mut Frame, area: Rect, weather: &WeatherFetcher, _co
 
     // 3. Current Temperature & Condition
     if let Some(ref cur) = snapshot.primary {
-        let (badge, desc) = weathercode_description(cur.weathercode);
+        let full_desc = weathercode_full_name(cur.weathercode);
         lines.push(
             Line::from(vec![
                 Span::styled("Current: ", Style::default().fg(Color::Rgb(129, 161, 193)).add_modifier(Modifier::BOLD)),
                 Span::styled(format!("{:.1}°C", cur.temp), Style::default().fg(Color::Rgb(229, 233, 240)).add_modifier(Modifier::BOLD)),
                 Span::styled("   │   ", Style::default().fg(Color::Rgb(94, 129, 172))),
-                Span::styled(format!("{} {}", badge, desc), Style::default().fg(Color::Rgb(143, 188, 187)).add_modifier(Modifier::BOLD)),
+                Span::styled(full_desc, Style::default().fg(Color::Rgb(143, 188, 187)).add_modifier(Modifier::BOLD)),
             ])
             .alignment(Alignment::Center),
         );
@@ -926,21 +926,21 @@ fn render_weather_modal(f: &mut Frame, area: Rect, weather: &WeatherFetcher, _co
             let range = if (max_temp - min_temp).abs() < 0.2 { 1.0 } else { max_temp - min_temp };
 
             // Line 1: Time Labels
-            let mut time_spans = vec![Span::styled("    ", Style::default())];
+            let mut time_spans = vec![Span::styled("  ", Style::default())];
             for h in hourly_slice {
                 time_spans.push(Span::styled(
-                    format!("{:<6}", h.time_label),
+                    format!("{:^7}", h.time_label),
                     Style::default().fg(Color::Rgb(129, 161, 193)).add_modifier(Modifier::BOLD),
                 ));
             }
             lines.push(Line::from(time_spans));
 
-            // Line 2: Condition Badges
-            let mut cond_spans = vec![Span::styled("    ", Style::default())];
+            // Line 2: Friendly Condition Words (e.g. Clear, Cloudy, Rain, etc.)
+            let mut cond_spans = vec![Span::styled("  ", Style::default())];
             for h in hourly_slice {
-                let (badge, _) = weathercode_description(h.weathercode);
+                let name = weathercode_short_name(h.weathercode);
                 cond_spans.push(Span::styled(
-                    format!("{:<6}", badge),
+                    format!("{:^7}", name),
                     Style::default().fg(Color::Rgb(143, 188, 187)),
                 ));
             }
@@ -956,14 +956,14 @@ fn render_weather_modal(f: &mut Frame, area: Rect, weather: &WeatherFetcher, _co
                 .collect();
 
             for row in (0..3).rev() {
-                let mut curve_spans = vec![Span::styled("    ", Style::default())];
+                let mut curve_spans = vec![Span::styled("  ", Style::default())];
                 for &h in &heights {
                     let (glyph, col) = if h == row {
-                        (" ╭──╮ ", Color::Rgb(143, 188, 187)) // Nord7 Frost Teal curve line
+                        (" ╭───╮ ", Color::Rgb(143, 188, 187)) // Nord7 Frost Teal curve line
                     } else if h > row {
-                        (" │  │ ", Color::Rgb(94, 129, 172))  // Nord10 Deep Arctic Blue shaded fill
+                        (" │   │ ", Color::Rgb(94, 129, 172))  // Nord10 Deep Arctic Blue shaded fill
                     } else {
-                        ("      ", Color::Reset)
+                        ("       ", Color::Reset)
                     };
                     curve_spans.push(Span::styled(glyph, Style::default().fg(col)));
                 }
@@ -971,10 +971,10 @@ fn render_weather_modal(f: &mut Frame, area: Rect, weather: &WeatherFetcher, _co
             }
 
             // Line 6: Numerical Temperature Values
-            let mut temp_spans = vec![Span::styled("    ", Style::default())];
+            let mut temp_spans = vec![Span::styled("  ", Style::default())];
             for h in hourly_slice {
                 temp_spans.push(Span::styled(
-                    format!("{:<6}", format!("{:.0}°", h.temp)),
+                    format!("{:^7}", format!("{:.0}°", h.temp)),
                     Style::default().fg(Color::Rgb(229, 233, 240)).add_modifier(Modifier::BOLD),
                 ));
             }
@@ -1011,7 +1011,7 @@ fn render_weather_modal(f: &mut Frame, area: Rect, weather: &WeatherFetcher, _co
         .alignment(Alignment::Center),
     );
 
-    let modal_width = 72.min(area.width.saturating_sub(4));
+    let modal_width = 76.min(area.width.saturating_sub(4));
     let modal_height = (lines.len() as u16 + 2).min(area.height.saturating_sub(2));
     let rect = centered_rect(modal_width, modal_height, area);
 

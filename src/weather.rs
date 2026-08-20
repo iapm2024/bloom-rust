@@ -44,31 +44,40 @@ pub struct DetailedForecastSnapshot {
     pub is_fetching: bool,
 }
 
-pub fn weathercode_description(code: u8) -> (&'static str, &'static str) {
+pub fn weathercode_short_name(code: u8) -> &'static str {
     match code {
-        0 => ("[CLR]", "Clear Sky"),
-        1 => ("[CLR]", "Mainly Clear"),
-        2 => ("[SCT]", "Partly Cloudy"),
-        3 => ("[OVC]", "Overcast"),
-        45 => ("[FOG]", "Fog"),
-        48 => ("[FOG]", "Depositing Rime Fog"),
-        51 => ("[DZL]", "Light Drizzle"),
-        53 => ("[DZL]", "Moderate Drizzle"),
-        55 => ("[DZL]", "Dense Drizzle"),
-        56 | 57 => ("[FZ-DZL]", "Freezing Drizzle"),
-        61 => ("[RAIN]", "Slight Rain"),
-        63 => ("[RAIN]", "Moderate Rain"),
-        65 => ("[RAIN]", "Heavy Rain"),
-        66 | 67 => ("[FZ-RA]", "Freezing Rain"),
-        71 => ("[SNOW]", "Slight Snow Fall"),
-        73 => ("[SNOW]", "Moderate Snow Fall"),
-        75 => ("[SNOW]", "Heavy Snow Fall"),
-        77 => ("[SNOW]", "Snow Grains"),
-        80..=82 => ("[SHWR]", "Rain Showers"),
-        85 | 86 => ("[SH-SN]", "Snow Showers"),
-        95 => ("[T-STM]", "Thunderstorm"),
-        96 | 99 => ("[T-STM]", "Thunderstorm with Hail"),
-        _ => ("[CLR]", "Clear"),
+        0 | 1 => "Clear",
+        2 => "Partly",
+        3 => "Cloudy",
+        45 | 48 => "Fog",
+        51..=55 => "Drizzle",
+        56 | 57 => "Frz.Dzl",
+        61..=65 => "Rain",
+        66 | 67 => "Frz.Rain",
+        71..=77 => "Snow",
+        80..=82 => "Showers",
+        85 | 86 => "Snow.Shw",
+        95..=99 => "Storm",
+        _ => "Clear",
+    }
+}
+
+pub fn weathercode_full_name(code: u8) -> &'static str {
+    match code {
+        0 => "Clear Sky",
+        1 => "Mainly Clear",
+        2 => "Partly Cloudy",
+        3 => "Overcast",
+        45 | 48 => "Foggy",
+        51..=55 => "Drizzle",
+        56 | 57 => "Freezing Drizzle",
+        61..=65 => "Rain",
+        66 | 67 => "Freezing Rain",
+        71..=77 => "Snow",
+        80..=82 => "Rain Showers",
+        85 | 86 => "Snow Showers",
+        95..=99 => "Thunderstorm",
+        _ => "Clear Sky",
     }
 }
 
