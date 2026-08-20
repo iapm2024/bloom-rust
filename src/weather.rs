@@ -97,7 +97,7 @@ impl WeatherFetcher {
         thread::spawn(move || {
             let client = reqwest::blocking::Client::builder()
                 .timeout(Duration::from_secs(4))
-                .user_agent("bloom-rust/0.2")
+                .user_agent("bloom-rust/0.3")
                 .build()
                 .ok();
 

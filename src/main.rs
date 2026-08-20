@@ -49,7 +49,7 @@ fn main() -> Result<()> {
             return Ok(());
         }
         ConfigActionResult::About => {
-            println!("bloom-rust v0.2.0 by iapizarro");
+            println!("bloom-rust v0.3.0 by iapizarro");
             println!("Nord-themed Terminal Cherry Blossom Screensaver written in Rust.");
             return Ok(());
         }

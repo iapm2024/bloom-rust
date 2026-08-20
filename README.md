@@ -3,15 +3,17 @@
 > Nord-themed Terminal Cherry Blossom Screensaver written in Rust.
 
 ## Overview
-`bloom-rust` is an ASCII cherry blossom tree animation and terminal screensaver with wind physics, dynamic altitude color shading, seasonal palettes, and twinkling night sky.
+`bloom-rust` is an ASCII cherry blossom tree animation and terminal screensaver featuring 3D dual-layer parallax depth, aerodynamic petal tumbling, organic terrain physics, dynamic altitude shading, real-time meteorological integration, and a pure Nord Polar Night aesthetic.
 
 ## Features
-- 🌸 **Cherry Blossom Simulation**: Particles detach and gently drift with wind sway physics.
-- 🌌 **Twinkling Starfield**: 5-tier Nord Frost twinkling star glow in night mode.
-- 🌦️ **Weather FX**: Real-time environmental rain and cloud integration via `wttr.in` (enabled by default).
-- 🎨 **Seasonal Modes**: Spring blossom, Summer greens, Autumn amber, Winter frost, or Auto (auto-detects hemisphere).
-- 🌲 **Nord Theme**: Pure Nord Polar Night and Snow Storm background styling.
-- 🔒 **Fully Portable**: Pure-Rust TLS (`rustls`) — no system OpenSSL or `pkg-config` needed.
+- **Dual-Layer Parallax Simulation**: Foreground and background petal planes drift independently around the canopy for authentic 3D spatial depth.
+- **Aerodynamic Rotational Tumbling**: Petals rotate dynamically with angular momentum, transitioning between broadside and edge-on silhouettes as they drift.
+- **Contoured Organic Ground & Petal Mounds**: Undulating terrain baseline with grass tufts, accumulating petal drifts, and gust-induced ground rustle.
+- **Meteorological FX & Puddle Reflections**: Real-time environmental rain, cloud, snow, and fog with animated puddle reflections and water ripple dynamics.
+- **Twinkling Starfield**: 5-tier Nord Frost twinkling star glow in night mode.
+- **Seasonal Modes**: Spring blossom, Summer greens, Autumn amber, Winter frost, or Auto (auto-detects hemisphere via GNOME/system location).
+- **Nord Color Palette**: Pure Nord Polar Night, Frost, Snow Storm, and Aurora styling with smooth radial foliage glow.
+- **Fully Portable**: Pure-Rust TLS (`rustls`) -- no system OpenSSL or `pkg-config` needed.
 
 ## Prerequisites
 - **Rust & Cargo**: Install via [rustup](https://rustup.rs/):
@@ -40,6 +42,7 @@ Options:
   -w, --sway <SWAY>         Wind sway amplitude multiplier
   -a, --art <FILE>          Custom ASCII art file path
       --stars               Enable twinkling starry background (default: on)
+      --no-stars            Disable twinkling starry background
   -m, --mood <MOOD>         Theme mood: day | night (default: night)
       --season <SEASON>     Override season: spring | summer | autumn | winter | auto
       --hemisphere <HEMI>   Hemisphere: north | south | auto (default: auto)

@@ -31,7 +31,7 @@ BIN_DIR="$PREFIX/bin"
 DESKTOP_DIR="$PREFIX/share/applications"
 
 do_uninstall() {
-    echo "🌸 Uninstalling bloom-rust by iapizarro from $PREFIX..."
+    echo "[bloom-rust] Uninstalling bloom-rust by iapizarro from $PREFIX..."
     rm -f "$BIN_DIR/bloom-rust"
     rm -f "$DESKTOP_DIR/bloom-rust.desktop"
     rm -rf "$DEST_DIR"
@@ -58,7 +58,7 @@ check_deps() {
 
 check_deps
 
-echo "🌸 Building release binary with Cargo..."
+echo "[bloom-rust] Building release binary with Cargo..."
 (cd "$SCRIPT_DIR" && cargo build --release)
 
 echo "Installing bloom-rust binary to $BIN_DIR..."
@@ -81,7 +81,7 @@ echo "Cleaning build target cache to conserve disk space..."
 (cd "$SCRIPT_DIR" && cargo clean)
 
 echo "======================================================="
-echo " Installation successful! bloom-rust v0.2.0 is ready."
+echo " Installation successful! bloom-rust v0.3.0 is ready."
 if [[ ":$PATH:" != *":$BIN_DIR:"* ]]; then
     echo " Note: $BIN_DIR is not in your PATH. You may add it via:"
     echo "   export PATH=\"\$PATH:$BIN_DIR\""
