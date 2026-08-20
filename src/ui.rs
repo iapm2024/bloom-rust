@@ -959,7 +959,7 @@ fn render_weather_modal(f: &mut Frame, area: Rect, weather: &WeatherFetcher, _co
                 let mut curve_spans = vec![Span::styled("    ", Style::default())];
                 for &h in &heights {
                     let (glyph, col) = if h == row {
-                        (" ╭──╮ ", Color::Rgb(235, 203, 139)) // Nord13 Warm Amber curve line
+                        (" ╭──╮ ", Color::Rgb(143, 188, 187)) // Nord7 Frost Teal curve line
                     } else if h > row {
                         (" │  │ ", Color::Rgb(94, 129, 172))  // Nord10 Deep Arctic Blue shaded fill
                     } else {
