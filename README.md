@@ -24,7 +24,7 @@
 ```bash
 ./install.sh
 ```
-This compiles a release binary and installs it to `~/.local/bin/bloom-rust` with a desktop launcher shortcut.
+This compiles an optimized release binary and installs it to `~/.local/bin/bloom-rust` (and `~/.cargo/bin/bloom-rust`).
 
 ## Uninstallation
 ```bash

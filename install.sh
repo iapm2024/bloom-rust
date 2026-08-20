@@ -67,20 +67,12 @@ cp "$SCRIPT_DIR/target/release/bloom-rust" "$BIN_DIR/bloom-rust.new"
 chmod 755 "$BIN_DIR/bloom-rust.new"
 mv -f "$BIN_DIR/bloom-rust.new" "$BIN_DIR/bloom-rust"
 
-echo "Installing App Launcher shortcut..."
-mkdir -p "$DESKTOP_DIR"
-cat << EOF > "$DESKTOP_DIR/bloom-rust.desktop"
-[Desktop Entry]
-Name=Bloom Rust
-Comment=Nord-themed Terminal Cherry Blossom Screensaver
-Exec=$BIN_DIR/bloom-rust
-Icon=screensaver
-Terminal=true
-Type=Application
-Categories=Utility;Screensaver;
-EOF
-chmod 644 "$DESKTOP_DIR/bloom-rust.desktop"
+if [ -d "$HOME/.cargo/bin" ] && [ "$BIN_DIR" != "$HOME/.cargo/bin" ]; then
+    install -m 755 "$SCRIPT_DIR/target/release/bloom-rust" "$HOME/.cargo/bin/bloom-rust" 2>/dev/null || true
+fi
 
+# Ensure any legacy desktop launcher shortcut is cleaned up
+rm -f "$DESKTOP_DIR/bloom-rust.desktop"
 if command -v update-desktop-database >/dev/null 2>&1; then
     update-desktop-database "$DESKTOP_DIR" 2>/dev/null || true
 fi
@@ -89,10 +81,10 @@ echo "Cleaning build target cache to conserve disk space..."
 (cd "$SCRIPT_DIR" && cargo clean)
 
 echo "======================================================="
-echo " Installation successful! bloom-rust v0.1 is ready."
+echo " Installation successful! bloom-rust v0.2.0 is ready."
 if [[ ":$PATH:" != *":$BIN_DIR:"* ]]; then
     echo " Note: $BIN_DIR is not in your PATH. You may add it via:"
     echo "   export PATH=\"\$PATH:$BIN_DIR\""
 fi
-echo " Run 'bloom-rust' in your terminal or app menu."
+echo " Run 'bloom-rust' in your terminal."
 echo "======================================================="

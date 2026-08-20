@@ -23,7 +23,7 @@ pub enum Hemisphere {
 }
 
 #[derive(Parser, Debug, Clone)]
-#[command(name = "bloom-rust", author = "iapizarro", version = "0.1.0", about = "Nord-themed Terminal Cherry Blossom Screensaver")]
+#[command(name = "bloom-rust", author = "iapizarro", version = "0.2.0", about = "Nord-themed Terminal Cherry Blossom Screensaver")]
 pub struct CliArgs {
     #[arg(short, long, help = "Number of falling blossoms / speed (1-10)")]
     pub speed: Option<f32>,
@@ -34,7 +34,10 @@ pub struct CliArgs {
     #[arg(short, long, help = "Custom ASCII art file path")]
     pub art: Option<String>,
 
-    #[arg(long, help = "Enable twinkling stars in night mode")]
+    #[arg(long, help = "Disable twinkling starry background")]
+    pub no_stars: bool,
+
+    #[arg(long, help = "Enable twinkling starry background (default: enabled)")]
     pub stars: bool,
 
     #[arg(short, long, help = "Color mood: day or night")]
@@ -106,15 +109,23 @@ pub fn parse_cli_args() -> ConfigActionResult {
         _ => Hemisphere::Auto,
     };
 
+    let stars = if args.no_stars {
+        false
+    } else {
+        true
+    };
+
+    let enable_weather = !args.no_weather;
+
     let config = AppConfig {
         speed: args.speed.unwrap_or(1.0).clamp(0.1, 10.0),
         sway: args.sway.unwrap_or(1.0).clamp(0.0, 5.0),
         art_path: args.art,
-        stars: args.stars || true,
+        stars,
         mood,
         season,
         hemisphere,
-        enable_weather: !args.no_weather,
+        enable_weather,
         city: args.city.unwrap_or_default(),
     };
 
@@ -122,7 +133,7 @@ pub fn parse_cli_args() -> ConfigActionResult {
 }
 
 pub fn print_help() {
-    println!("bloom-rust 0.1.0 by iapizarro");
+    println!("bloom-rust 0.2.0 by iapizarro");
     println!("Nord-themed Terminal Cherry Blossom Screensaver");
     println!("\nUsage: bloom-rust [OPTIONS]\n");
     println!("Options:");
@@ -130,6 +141,7 @@ pub fn print_help() {
     println!("  -w, --sway <SWAY>         Wind sway amplitude multiplier");
     println!("  -a, --art <FILE>          Custom ASCII art file path");
     println!("      --stars               Enable twinkling starry background (default: on)");
+    println!("      --no-stars            Disable twinkling starry background");
     println!("  -m, --mood <MOOD>         Theme mood: day | night (default: night)");
     println!("      --season <SEASON>     Override season: spring | summer | autumn | winter | auto");
     println!("      --hemisphere <HEMI>   Hemisphere: north | south | auto (default: auto)");
@@ -141,5 +153,5 @@ pub fn print_help() {
 }
 
 pub fn print_version() {
-    println!("bloom-rust v0.1.0");
+    println!("bloom-rust v0.2.0");
 }

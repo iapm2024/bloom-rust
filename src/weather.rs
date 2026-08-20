@@ -34,6 +34,8 @@ pub struct CacheState {
     pub santiago_data: Option<WeatherData>,
     pub last_fetch: Option<std::time::Instant>,
     pub is_fetching: bool,
+    pub cached_condition: WeatherCondition,
+    pub cached_info: String,
 }
 
 #[derive(Clone)]
@@ -45,6 +47,12 @@ pub struct WeatherFetcher {
 
 impl WeatherFetcher {
     pub fn new(enabled: bool, manual_city: String) -> Self {
+        let default_info = if enabled {
+            "Concepción · Updating...  │  Santiago · Updating...".to_string()
+        } else {
+            "Offline Mode".to_string()
+        };
+
         let fetcher = Self {
             cache: Arc::new(Mutex::new(CacheState {
                 gnome_loc: None,
@@ -53,6 +61,8 @@ impl WeatherFetcher {
                 santiago_data: None,
                 last_fetch: None,
                 is_fetching: false,
+                cached_condition: WeatherCondition::Clear,
+                cached_info: default_info,
             })),
             enabled,
             manual_city,
@@ -85,22 +95,28 @@ impl WeatherFetcher {
         }
 
         thread::spawn(move || {
+            let client = reqwest::blocking::Client::builder()
+                .timeout(Duration::from_secs(4))
+                .user_agent("bloom-rust/0.2")
+                .build()
+                .ok();
+
             let gnome_loc = Self::detect_gnome_location();
             let mut detected_ip_city = None;
             let (req_lat, req_lon) = if manual_city.is_empty() {
                 if let Some(ref loc) = gnome_loc {
                     (loc.lat, loc.lon)
                 } else {
-                    let ip_loc = Self::fetch_ip_location();
+                    let ip_loc = Self::fetch_ip_location(client.as_ref());
                     detected_ip_city = Some(ip_loc.0);
                     (ip_loc.1, ip_loc.2)
                 }
             } else {
-                Self::geocode_city(&manual_city).unwrap_or((-36.8335, -73.0487))
+                Self::geocode_city(&manual_city, client.as_ref()).unwrap_or((-36.8335, -73.0487))
             };
 
-            let primary = Self::fetch_open_meteo(req_lat, req_lon);
-            let santiago = Self::fetch_open_meteo(-33.4489, -70.6693);
+            let primary = Self::fetch_open_meteo(req_lat, req_lon, client.as_ref());
+            let santiago = Self::fetch_open_meteo(-33.4489, -70.6693, client.as_ref());
 
             if let Ok(mut guard) = cache_clone.lock() {
                 if gnome_loc.is_some() {
@@ -109,25 +125,57 @@ impl WeatherFetcher {
                 if detected_ip_city.is_some() {
                     guard.ip_city = detected_ip_city;
                 }
-                guard.primary_data = primary;
-                guard.santiago_data = santiago;
+                if primary.is_some() {
+                    guard.primary_data = primary.clone();
+                }
+                if santiago.is_some() {
+                    guard.santiago_data = santiago;
+                }
+
+                let condition = match guard.primary_data.as_ref().map(|d| d.weathercode) {
+                    Some(0 | 1) => WeatherCondition::Clear,
+                    Some(2 | 3) => WeatherCondition::Cloudy,
+                    Some(45 | 48) => WeatherCondition::Fog,
+                    Some(51..=67 | 80..=82 | 95..=99) => WeatherCondition::Rain,
+                    Some(71..=77 | 85..=86) => WeatherCondition::Snow,
+                    _ => WeatherCondition::Clear,
+                };
+                guard.cached_condition = condition;
+
+                let city = if !manual_city.is_empty() {
+                    manual_city.clone()
+                } else if let Some(ref g) = guard.gnome_loc {
+                    g.name.clone()
+                } else if let Some(ref ip) = guard.ip_city {
+                    ip.clone()
+                } else {
+                    DEFAULT_CITY_NAME.to_string()
+                };
+
+                let p_str = match guard.primary_data {
+                    Some(ref d) => format!("{:.1}°C", d.temp),
+                    None => "Updating...".to_string(),
+                };
+
+                let s_str = match guard.santiago_data {
+                    Some(ref d) => format!("{:.1}°C", d.temp),
+                    None => "Updating...".to_string(),
+                };
+
+                guard.cached_info = format!("{} · {}  │  Santiago · {}", city, p_str, s_str);
                 guard.last_fetch = Some(std::time::Instant::now());
                 guard.is_fetching = false;
             }
         });
     }
 
-    fn geocode_city(city: &str) -> Option<(f64, f64)> {
+    fn geocode_city(city: &str, client: Option<&reqwest::blocking::Client>) -> Option<(f64, f64)> {
+        let client = client?;
         let encoded_city = city.replace(' ', "%20");
         let url = format!(
             "https://geocoding-api.open-meteo.com/v1/search?name={}&count=1",
             encoded_city
         );
-        let client = reqwest::blocking::Client::builder()
-            .timeout(Duration::from_secs(3))
-            .user_agent("bloom-rust/0.1")
-            .build()
-            .ok()?;
 
         let resp = client.get(&url).send().ok()?;
         let json: serde_json::Value = resp.json().ok()?;
@@ -186,34 +234,26 @@ impl WeatherFetcher {
         }
     }
 
-    fn fetch_ip_location() -> (String, f64, f64) {
-        if let Ok(resp) = reqwest::blocking::Client::builder()
-            .timeout(Duration::from_secs(3))
-            .user_agent("bloom-rust/0.1")
-            .build()
-            .and_then(|c| c.get("https://ip-api.com/json/").send())
-        {
-            if let Ok(json) = resp.json::<serde_json::Value>() {
-                let city = json["city"].as_str().unwrap_or(DEFAULT_CITY_NAME).to_string();
-                let lat = json["lat"].as_f64().unwrap_or(-36.8335);
-                let lon = json["lon"].as_f64().unwrap_or(-73.0487);
-                return (city, lat, lon);
+    fn fetch_ip_location(client: Option<&reqwest::blocking::Client>) -> (String, f64, f64) {
+        if let Some(c) = client {
+            if let Ok(resp) = c.get("https://ip-api.com/json/").send() {
+                if let Ok(json) = resp.json::<serde_json::Value>() {
+                    let city = json["city"].as_str().unwrap_or(DEFAULT_CITY_NAME).to_string();
+                    let lat = json["lat"].as_f64().unwrap_or(-36.8335);
+                    let lon = json["lon"].as_f64().unwrap_or(-73.0487);
+                    return (city, lat, lon);
+                }
             }
         }
         (DEFAULT_CITY_NAME.to_string(), -36.8335, -73.0487)
     }
 
-    fn fetch_open_meteo(lat: f64, lon: f64) -> Option<WeatherData> {
+    fn fetch_open_meteo(lat: f64, lon: f64, client: Option<&reqwest::blocking::Client>) -> Option<WeatherData> {
+        let client = client?;
         let url = format!(
             "https://api.open-meteo.com/v1/forecast?latitude={:.4}&longitude={:.4}&current_weather=true",
             lat, lon
         );
-
-        let client = reqwest::blocking::Client::builder()
-            .timeout(Duration::from_secs(4))
-            .user_agent("bloom-rust/0.1")
-            .build()
-            .ok()?;
 
         let resp = client.get(&url).send().ok()?;
         let json: serde_json::Value = resp.json().ok()?;
@@ -229,18 +269,10 @@ impl WeatherFetcher {
         }
 
         if let Ok(guard) = self.cache.lock() {
-            if let Some(ref d) = guard.primary_data {
-                return match d.weathercode {
-                    0 | 1 => WeatherCondition::Clear,
-                    2 | 3 => WeatherCondition::Cloudy,
-                    45 | 48 => WeatherCondition::Fog,
-                    51..=67 | 80..=82 | 95..=99 => WeatherCondition::Rain,
-                    71..=77 | 85..=86 => WeatherCondition::Snow,
-                    _ => WeatherCondition::Clear,
-                };
-            }
+            guard.cached_condition
+        } else {
+            WeatherCondition::Clear
         }
-        WeatherCondition::Clear
     }
 
     pub fn get_weather_info(&self) -> String {
@@ -248,42 +280,21 @@ impl WeatherFetcher {
             return "Offline Mode".to_string();
         }
 
-        let should_refetch = if let Ok(guard) = self.cache.lock() {
-            if let Some(last) = guard.last_fetch {
+        if let Ok(guard) = self.cache.lock() {
+            let should_refetch = if let Some(last) = guard.last_fetch {
                 last.elapsed() > Duration::from_secs(900)
             } else {
-                false
+                !guard.is_fetching
+            };
+
+            let cached = guard.cached_info.clone();
+            drop(guard);
+
+            if should_refetch {
+                self.trigger_fetch_background();
             }
-        } else {
-            false
-        };
 
-        if should_refetch {
-            self.trigger_fetch_background();
-        }
-
-        if let Ok(guard) = self.cache.lock() {
-            let city = if !self.manual_city.is_empty() {
-                self.manual_city.clone()
-            } else if let Some(ref g) = guard.gnome_loc {
-                g.name.clone()
-            } else if let Some(ref ip) = guard.ip_city {
-                ip.clone()
-            } else {
-                DEFAULT_CITY_NAME.to_string()
-            };
-
-            let p_str = match guard.primary_data {
-                Some(ref d) => format!("{:.1}°C", d.temp),
-                None => "Updating...".to_string(),
-            };
-
-            let s_str = match guard.santiago_data {
-                Some(ref d) => format!("{:.1}°C", d.temp),
-                None => "Updating...".to_string(),
-            };
-
-            format!("{} · {}  │  Santiago · {}", city, p_str, s_str)
+            cached
         } else {
             "Concepción · N/A  │  Santiago · N/A".to_string()
         }
@@ -294,9 +305,6 @@ impl WeatherFetcher {
             if let Some(ref g) = guard.gnome_loc {
                 return g.lat < 0.0;
             }
-        }
-        if let Some(loc) = Self::detect_gnome_location() {
-            return loc.lat < 0.0;
         }
 
         // Check /etc/localtime symlink
@@ -431,7 +439,7 @@ impl WeatherFxEngine {
         }
 
         // 2. Ground Collision & Splashes
-        let mut new_splashes = Vec::new();
+        let mut new_splashes = Vec::with_capacity(16);
         self.particles.retain(|p| {
             if p.kind == WeatherFxKind::RainDrop && p.y >= ground_row {
                 if new_splashes.len() < 16 {

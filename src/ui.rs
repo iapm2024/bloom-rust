@@ -489,33 +489,33 @@ fn get_effective_season(config: &AppConfig, weather: &WeatherFetcher) -> Season 
     }
 }
 
-fn get_seasonal_colors(season: Season) -> Vec<Color> {
+fn get_seasonal_colors(season: Season) -> &'static [Color] {
     match season {
-        Season::Spring => vec![
+        Season::Spring => &[
             Color::Rgb(180, 142, 173), // Nord15 Nordic Purple
             Color::Rgb(136, 192, 208), // Nord8 Frost Cyan
             Color::Rgb(236, 239, 244), // Nord6 Snow White
             Color::Rgb(143, 188, 187), // Nord7 Frost Teal
         ],
-        Season::Summer => vec![
+        Season::Summer => &[
             Color::Rgb(163, 190, 140), // Nord14 Aurora Green
             Color::Rgb(235, 203, 139), // Nord13 Warm Gold
             Color::Rgb(136, 192, 208), // Nord8 Frost Cyan
             Color::Rgb(143, 188, 187), // Nord7 Frost Teal
         ],
-        Season::Autumn => vec![
+        Season::Autumn => &[
             Color::Rgb(235, 203, 139), // Nord13 Amber Gold
             Color::Rgb(191, 97, 106),  // Nord11 Aurora Red
             Color::Rgb(208, 135, 112), // Nord12 Aurora Orange
             Color::Rgb(180, 142, 173), // Nord15 Purple
         ],
-        Season::Winter => vec![
+        Season::Winter => &[
             Color::Rgb(136, 192, 208), // Frost Cyan
             Color::Rgb(236, 239, 244), // Snow White
             Color::Rgb(94, 129, 172),  // Deep Arctic Blue
             Color::Rgb(143, 188, 187), // Frost Teal
         ],
-        Season::Auto => vec![
+        Season::Auto => &[
             Color::Rgb(180, 142, 173),
             Color::Rgb(136, 192, 208),
             Color::Rgb(236, 239, 244),
@@ -534,7 +534,7 @@ fn render_about_modal(f: &mut Frame, area: Rect, _config: &AppConfig) {
 
     let mut lines = vec![
         Line::from(vec![
-            Span::styled("BLOOM-RUST v0.1.0", Style::default().fg(Color::Rgb(94, 129, 172)).add_modifier(Modifier::BOLD)),
+            Span::styled("BLOOM-RUST v0.2.0", Style::default().fg(Color::Rgb(94, 129, 172)).add_modifier(Modifier::BOLD)),
         ]).alignment(Alignment::Center),
         Line::from(vec![
             Span::styled("Author: ", Style::default().fg(Color::Rgb(129, 161, 193)).add_modifier(Modifier::BOLD)),

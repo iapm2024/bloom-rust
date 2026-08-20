@@ -30,7 +30,18 @@ impl Drop for TerminalCleanup {
     }
 }
 
+fn install_panic_hook() {
+    let original_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |panic_info| {
+        let _ = disable_raw_mode();
+        let _ = execute!(stdout(), LeaveAlternateScreen, crossterm::cursor::Show);
+        original_hook(panic_info);
+    }));
+}
+
 fn main() -> Result<()> {
+    install_panic_hook();
+
     let mut config = match parse_cli_args() {
         ConfigActionResult::Run(c) => c,
         ConfigActionResult::Help => {
@@ -38,7 +49,7 @@ fn main() -> Result<()> {
             return Ok(());
         }
         ConfigActionResult::About => {
-            println!("bloom-rust v0.1 by iapizarro");
+            println!("bloom-rust v0.2.0 by iapizarro");
             println!("Nord-themed Terminal Cherry Blossom Screensaver written in Rust.");
             return Ok(());
         }
