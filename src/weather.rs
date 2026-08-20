@@ -28,22 +28,11 @@ pub struct HourlyForecast {
     pub weathercode: u8,
 }
 
-#[allow(dead_code)]
-#[derive(Debug, Clone)]
-pub struct DailyForecast {
-    pub date: String,
-    pub day_name: String,
-    pub temp_max: f64,
-    pub temp_min: f64,
-    pub weathercode: u8,
-}
-
 #[derive(Debug, Clone)]
 pub struct WeatherData {
     pub temp: f64,
     pub weathercode: u8,
     pub hourly: Vec<HourlyForecast>,
-    pub daily: Vec<DailyForecast>,
 }
 
 #[allow(dead_code)]
@@ -296,7 +285,7 @@ impl WeatherFetcher {
     fn fetch_open_meteo(lat: f64, lon: f64, client: Option<&reqwest::blocking::Client>) -> Option<WeatherData> {
         let client = client?;
         let url = format!(
-            "https://api.open-meteo.com/v1/forecast?latitude={:.4}&longitude={:.4}&current_weather=true&hourly=temperature_2m,weathercode&daily=weathercode,temperature_2m_max,temperature_2m_min&timezone=auto",
+            "https://api.open-meteo.com/v1/forecast?latitude={:.4}&longitude={:.4}&current_weather=true&hourly=temperature_2m,weathercode&timezone=auto",
             lat, lon
         );
 
@@ -341,44 +330,10 @@ impl WeatherFetcher {
             }
         }
 
-        let mut daily = Vec::new();
-        if let (Some(times), Some(maxs), Some(mins), Some(codes)) = (
-            json["daily"]["time"].as_array(),
-            json["daily"]["temperature_2m_max"].as_array(),
-            json["daily"]["temperature_2m_min"].as_array(),
-            json["daily"]["weathercode"].as_array(),
-        ) {
-            for i in 0..times.len().min(5) {
-                let date_str = times[i].as_str().unwrap_or("").to_string();
-                let day_name = if i == 0 {
-                    "Today".to_string()
-                } else if i == 1 {
-                    "Tomorrow".to_string()
-                } else if let Ok(parsed_date) = chrono::NaiveDate::parse_from_str(&date_str, "%Y-%m-%d") {
-                    parsed_date.format("%A").to_string()
-                } else {
-                    format!("Day {}", i + 1)
-                };
-
-                let t_max = maxs.get(i).and_then(|v| v.as_f64()).unwrap_or(temp);
-                let t_min = mins.get(i).and_then(|v| v.as_f64()).unwrap_or(temp);
-                let code = codes.get(i).and_then(|v| v.as_u64()).unwrap_or(weathercode as u64) as u8;
-
-                daily.push(DailyForecast {
-                    date: date_str,
-                    day_name,
-                    temp_max: t_max,
-                    temp_min: t_min,
-                    weathercode: code,
-                });
-            }
-        }
-
         Some(WeatherData {
             temp,
             weathercode,
             hourly,
-            daily,
         })
     }
 

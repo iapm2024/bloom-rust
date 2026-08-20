@@ -984,41 +984,6 @@ fn render_weather_modal(f: &mut Frame, area: Rect, weather: &WeatherFetcher, _co
                 lines.push(Line::from(""));
             }
         }
-
-        // 5. 5-Day Outlook (Clean & Concise)
-        if !cur.daily.is_empty() {
-            lines.push(
-                Line::from(vec![
-                    Span::styled("──────────── ", Style::default().fg(Color::Rgb(94, 129, 172))),
-                    Span::styled("5-Day Outlook", Style::default().fg(Color::Rgb(143, 188, 187)).add_modifier(Modifier::BOLD)),
-                    Span::styled(" ────────────", Style::default().fg(Color::Rgb(94, 129, 172))),
-                ])
-                .alignment(Alignment::Center),
-            );
-
-            if !is_compact {
-                lines.push(Line::from(""));
-            }
-
-            let days_to_show = if is_compact { 3 } else { cur.daily.len().min(5) };
-            for d in &cur.daily[..days_to_show] {
-                let (d_badge, d_desc) = weathercode_description(d.weathercode);
-                let temp_range = format!("{:>4.1}° - {:>4.1}°C", d.temp_min, d.temp_max);
-
-                lines.push(
-                    Line::from(vec![
-                        Span::styled("    ", Style::default()),
-                        Span::styled(format!("{:<12}", d.day_name), Style::default().fg(Color::Rgb(94, 129, 172)).add_modifier(Modifier::BOLD)),
-                        Span::styled(format!(" {:<18}", temp_range), Style::default().fg(Color::Rgb(229, 233, 240))),
-                        Span::styled(format!(" {} {}", d_badge, d_desc), Style::default().fg(Color::Rgb(143, 188, 187))),
-                    ])
-                );
-            }
-
-            if !is_compact {
-                lines.push(Line::from(""));
-            }
-        }
     } else {
         lines.push(
             Line::from(vec![
