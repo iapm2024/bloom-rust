@@ -44,21 +44,19 @@ pub struct DetailedForecastSnapshot {
     pub is_fetching: bool,
 }
 
-pub fn weathercode_short_name(code: u8) -> &'static str {
+pub fn weathercode_symbol(code: u8) -> &'static str {
     match code {
-        0 | 1 => "Clear",
-        2 => "Partly",
-        3 => "Cloudy",
-        45 | 48 => "Fog",
-        51..=55 => "Drizzle",
-        56 | 57 => "Frz.Dzl",
-        61..=65 => "Rain",
-        66 | 67 => "Frz.Rain",
-        71..=77 => "Snow",
-        80..=82 => "Showers",
-        85 | 86 => "Snow.Shw",
-        95..=99 => "Storm",
-        _ => "Clear",
+        0 | 1 => "☀",
+        2 => "⛅",
+        3 => "☁",
+        45 | 48 => "≡",
+        51..=57 => "⁘",
+        61..=67 => "☂",
+        71..=77 => "❄",
+        80..=82 => "☔",
+        85 | 86 => "❅",
+        95..=99 => "⚡",
+        _ => "☀",
     }
 }
 

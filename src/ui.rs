@@ -9,8 +9,9 @@ use ratatui::{
 use crate::config::{AppConfig, Hemisphere, Mood, Season};
 use crate::physics::{Leaf, LeafState, ParallaxLayer, ParticleEngine};
 use crate::stars::StarrySky;
-use crate::weather::{weathercode_full_name, weathercode_short_name, WeatherCondition, WeatherFetcher, WeatherFxEngine, WeatherFxKind};
+use crate::weather::{weathercode_full_name, weathercode_symbol, WeatherCondition, WeatherFetcher, WeatherFxEngine, WeatherFxKind};
 use chrono::{Datelike, Local};
+use unicode_width::UnicodeWidthStr;
 
 use std::cell::RefCell;
 
@@ -857,6 +858,17 @@ fn render_about_modal(f: &mut Frame, area: Rect, _config: &AppConfig) {
     f.render_widget(paragraph, rect);
 }
 
+fn center_glyph_text(s: &str, total_width: usize) -> String {
+    let w = s.width();
+    if w >= total_width {
+        return s.to_string();
+    }
+    let pad = total_width - w;
+    let left = pad / 2;
+    let right = pad - left;
+    format!("{}{}{}", " ".repeat(left), s, " ".repeat(right))
+}
+
 fn render_weather_modal(f: &mut Frame, area: Rect, weather: &WeatherFetcher, _config: &AppConfig) {
     let snapshot = weather.get_detailed_snapshot();
     let mut lines = Vec::new();
@@ -888,13 +900,14 @@ fn render_weather_modal(f: &mut Frame, area: Rect, weather: &WeatherFetcher, _co
 
     // 3. Current Temperature & Condition
     if let Some(ref cur) = snapshot.primary {
+        let sym = weathercode_symbol(cur.weathercode);
         let full_desc = weathercode_full_name(cur.weathercode);
         lines.push(
             Line::from(vec![
                 Span::styled("Current: ", Style::default().fg(Color::Rgb(129, 161, 193)).add_modifier(Modifier::BOLD)),
                 Span::styled(format!("{:.1}°C", cur.temp), Style::default().fg(Color::Rgb(229, 233, 240)).add_modifier(Modifier::BOLD)),
                 Span::styled("   │   ", Style::default().fg(Color::Rgb(94, 129, 172))),
-                Span::styled(full_desc, Style::default().fg(Color::Rgb(143, 188, 187)).add_modifier(Modifier::BOLD)),
+                Span::styled(format!("{}  {}", sym, full_desc), Style::default().fg(Color::Rgb(143, 188, 187)).add_modifier(Modifier::BOLD)),
             ])
             .alignment(Alignment::Center),
         );
@@ -935,13 +948,13 @@ fn render_weather_modal(f: &mut Frame, area: Rect, weather: &WeatherFetcher, _co
             }
             lines.push(Line::from(time_spans));
 
-            // Line 2: Friendly Condition Words (e.g. Clear, Cloudy, Rain, etc.)
+            // Line 2: Weather Glyphs / Symbols (e.g. ☀, ☁, ⛅, ☂, ❄, ⚡)
             let mut cond_spans = vec![Span::styled("  ", Style::default())];
             for h in hourly_slice {
-                let name = weathercode_short_name(h.weathercode);
+                let sym = weathercode_symbol(h.weathercode);
                 cond_spans.push(Span::styled(
-                    format!("{:^7}", name),
-                    Style::default().fg(Color::Rgb(143, 188, 187)),
+                    center_glyph_text(sym, 7),
+                    Style::default().fg(Color::Rgb(143, 188, 187)).add_modifier(Modifier::BOLD),
                 ));
             }
             lines.push(Line::from(cond_spans));
