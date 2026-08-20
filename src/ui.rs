@@ -9,7 +9,7 @@ use ratatui::{
 use crate::config::{AppConfig, Hemisphere, Mood, Season};
 use crate::physics::{Leaf, LeafState, ParallaxLayer, ParticleEngine};
 use crate::stars::StarrySky;
-use crate::weather::{weathercode_description, wind_dir_to_cardinal, WeatherCondition, WeatherFetcher, WeatherFxEngine, WeatherFxKind};
+use crate::weather::{weathercode_description, WeatherCondition, WeatherFetcher, WeatherFxEngine, WeatherFxKind};
 use chrono::{Datelike, Local};
 
 use std::cell::RefCell;
@@ -866,30 +866,19 @@ fn render_weather_modal(f: &mut Frame, area: Rect, weather: &WeatherFetcher, _co
     lines.push(
         Line::from(vec![
             Span::styled(
-                "WEATHER & METEOROLOGICAL FORECAST",
+                "WEATHER FORECAST",
                 Style::default().fg(Color::Rgb(94, 129, 172)).add_modifier(Modifier::BOLD),
             ),
         ])
         .alignment(Alignment::Center),
     );
 
-    // 2. Station metadata
+    // 2. Location & Update Timestamp
     let updated_str = snapshot.last_updated.as_deref().unwrap_or("Updating...");
-    let lat_str = if snapshot.lat < 0.0 {
-        format!("{:.2}°S", snapshot.lat.abs())
-    } else {
-        format!("{:.2}°N", snapshot.lat)
-    };
-    let lon_str = if snapshot.lon < 0.0 {
-        format!("{:.2}°W", snapshot.lon.abs())
-    } else {
-        format!("{:.2}°E", snapshot.lon)
-    };
-
     lines.push(
         Line::from(vec![
             Span::styled("Location: ", Style::default().fg(Color::Rgb(129, 161, 193)).add_modifier(Modifier::BOLD)),
-            Span::styled(format!("{} ({}, {})", snapshot.location_name, lat_str, lon_str), Style::default().fg(Color::Rgb(229, 233, 240))),
+            Span::styled(&snapshot.location_name, Style::default().fg(Color::Rgb(229, 233, 240))),
             Span::styled("   *   ", Style::default().fg(Color::Rgb(94, 129, 172))),
             Span::styled("Updated: ", Style::default().fg(Color::Rgb(129, 161, 193)).add_modifier(Modifier::BOLD)),
             Span::styled(updated_str, Style::default().fg(Color::Rgb(229, 233, 240))),
@@ -897,47 +886,106 @@ fn render_weather_modal(f: &mut Frame, area: Rect, weather: &WeatherFetcher, _co
         .alignment(Alignment::Center),
     );
 
-    if !is_compact {
-        lines.push(Line::from(""));
-    }
-
-    // 3. Current Live Telemetry Block
+    // 3. Current Temperature & Condition
     if let Some(ref cur) = snapshot.primary {
         let (badge, desc) = weathercode_description(cur.weathercode);
-        let wind_cardinal = wind_dir_to_cardinal(cur.wind_direction);
-        let hum_str = cur.humidity.map(|h| format!("{:.0}%", h)).unwrap_or_else(|| "N/A".to_string());
-        let press_str = cur.pressure.map(|p| format!("{:.0} hPa", p)).unwrap_or_else(|| "N/A".to_string());
-
         lines.push(
             Line::from(vec![
-                Span::styled("    ", Style::default()),
-                Span::styled("Temperature: ", Style::default().fg(Color::Rgb(129, 161, 193)).add_modifier(Modifier::BOLD)),
-                Span::styled(format!("{:.1}°C", cur.temp), Style::default().fg(Color::Rgb(229, 233, 240))),
+                Span::styled("Current: ", Style::default().fg(Color::Rgb(129, 161, 193)).add_modifier(Modifier::BOLD)),
+                Span::styled(format!("{:.1}°C", cur.temp), Style::default().fg(Color::Rgb(229, 233, 240)).add_modifier(Modifier::BOLD)),
                 Span::styled("   │   ", Style::default().fg(Color::Rgb(94, 129, 172))),
-                Span::styled("Condition: ", Style::default().fg(Color::Rgb(129, 161, 193)).add_modifier(Modifier::BOLD)),
                 Span::styled(format!("{} {}", badge, desc), Style::default().fg(Color::Rgb(143, 188, 187)).add_modifier(Modifier::BOLD)),
             ])
-        );
-
-        lines.push(
-            Line::from(vec![
-                Span::styled("    ", Style::default()),
-                Span::styled("Wind Speed:  ", Style::default().fg(Color::Rgb(129, 161, 193)).add_modifier(Modifier::BOLD)),
-                Span::styled(format!("{:.1} km/h ({})", cur.wind_speed, wind_cardinal), Style::default().fg(Color::Rgb(229, 233, 240))),
-                Span::styled("   │   ", Style::default().fg(Color::Rgb(94, 129, 172))),
-                Span::styled("Humidity: ", Style::default().fg(Color::Rgb(129, 161, 193)).add_modifier(Modifier::BOLD)),
-                Span::styled(hum_str, Style::default().fg(Color::Rgb(229, 233, 240))),
-                Span::styled("   │   ", Style::default().fg(Color::Rgb(94, 129, 172))),
-                Span::styled("Pressure: ", Style::default().fg(Color::Rgb(129, 161, 193)).add_modifier(Modifier::BOLD)),
-                Span::styled(press_str, Style::default().fg(Color::Rgb(229, 233, 240))),
-            ])
+            .alignment(Alignment::Center),
         );
 
         if !is_compact {
             lines.push(Line::from(""));
         }
 
-        // 4. Multi-Day Outlook Table
+        // 4. Hourly Forecast Timeline Chart (GNOME Weather style)
+        if !cur.hourly.is_empty() {
+            lines.push(
+                Line::from(vec![
+                    Span::styled("──────────── ", Style::default().fg(Color::Rgb(94, 129, 172))),
+                    Span::styled("Hourly Forecast", Style::default().fg(Color::Rgb(143, 188, 187)).add_modifier(Modifier::BOLD)),
+                    Span::styled(" ────────────", Style::default().fg(Color::Rgb(94, 129, 172))),
+                ])
+                .alignment(Alignment::Center),
+            );
+
+            if !is_compact {
+                lines.push(Line::from(""));
+            }
+
+            let num_points = cur.hourly.len().min(10);
+            let hourly_slice = &cur.hourly[..num_points];
+
+            let min_temp = hourly_slice.iter().map(|h| h.temp).fold(f64::INFINITY, f64::min);
+            let max_temp = hourly_slice.iter().map(|h| h.temp).fold(f64::NEG_INFINITY, f64::max);
+            let range = if (max_temp - min_temp).abs() < 0.2 { 1.0 } else { max_temp - min_temp };
+
+            // Line 1: Time Labels
+            let mut time_spans = vec![Span::styled("    ", Style::default())];
+            for h in hourly_slice {
+                time_spans.push(Span::styled(
+                    format!("{:<6}", h.time_label),
+                    Style::default().fg(Color::Rgb(129, 161, 193)).add_modifier(Modifier::BOLD),
+                ));
+            }
+            lines.push(Line::from(time_spans));
+
+            // Line 2: Condition Badges
+            let mut cond_spans = vec![Span::styled("    ", Style::default())];
+            for h in hourly_slice {
+                let (badge, _) = weathercode_description(h.weathercode);
+                cond_spans.push(Span::styled(
+                    format!("{:<6}", badge),
+                    Style::default().fg(Color::Rgb(143, 188, 187)),
+                ));
+            }
+            lines.push(Line::from(cond_spans));
+
+            // Lines 3-5: Temperature Trend Curve (3 vertical rows)
+            let heights: Vec<usize> = hourly_slice
+                .iter()
+                .map(|h| {
+                    let frac = ((h.temp - min_temp) / range).clamp(0.0, 1.0);
+                    (frac * 2.0).round() as usize
+                })
+                .collect();
+
+            for row in (0..3).rev() {
+                let mut curve_spans = vec![Span::styled("    ", Style::default())];
+                for &h in &heights {
+                    let (glyph, col) = if h == row {
+                        (" ╭──╮ ", Color::Rgb(235, 203, 139)) // Nord13 Warm Amber curve line
+                    } else if h > row {
+                        (" │  │ ", Color::Rgb(94, 129, 172))  // Nord10 Deep Arctic Blue shaded fill
+                    } else {
+                        ("      ", Color::Reset)
+                    };
+                    curve_spans.push(Span::styled(glyph, Style::default().fg(col)));
+                }
+                lines.push(Line::from(curve_spans));
+            }
+
+            // Line 6: Numerical Temperature Values
+            let mut temp_spans = vec![Span::styled("    ", Style::default())];
+            for h in hourly_slice {
+                temp_spans.push(Span::styled(
+                    format!("{:<6}", format!("{:.0}°", h.temp)),
+                    Style::default().fg(Color::Rgb(229, 233, 240)).add_modifier(Modifier::BOLD),
+                ));
+            }
+            lines.push(Line::from(temp_spans));
+
+            if !is_compact {
+                lines.push(Line::from(""));
+            }
+        }
+
+        // 5. 5-Day Outlook (Clean & Concise)
         if !cur.daily.is_empty() {
             lines.push(
                 Line::from(vec![
@@ -952,31 +1000,17 @@ fn render_weather_modal(f: &mut Frame, area: Rect, weather: &WeatherFetcher, _co
                 lines.push(Line::from(""));
             }
 
-            lines.push(
-                Line::from(vec![
-                    Span::styled("    ", Style::default()),
-                    Span::styled(format!("{:<12}", "Day"), Style::default().fg(Color::Rgb(129, 161, 193)).add_modifier(Modifier::BOLD)),
-                    Span::styled(format!(" {:<17}", "Temp Range"), Style::default().fg(Color::Rgb(129, 161, 193)).add_modifier(Modifier::BOLD)),
-                    Span::styled(format!(" {:<20}", "Condition"), Style::default().fg(Color::Rgb(129, 161, 193)).add_modifier(Modifier::BOLD)),
-                    Span::styled(format!(" {:<8}", "Precip"), Style::default().fg(Color::Rgb(129, 161, 193)).add_modifier(Modifier::BOLD)),
-                    Span::styled(format!(" {:<10}", "Wind"), Style::default().fg(Color::Rgb(129, 161, 193)).add_modifier(Modifier::BOLD)),
-                ])
-            );
-
-            for d in &cur.daily {
+            let days_to_show = if is_compact { 3 } else { cur.daily.len().min(5) };
+            for d in &cur.daily[..days_to_show] {
                 let (d_badge, d_desc) = weathercode_description(d.weathercode);
-                let cond_str = format!("{} {}", d_badge, d_desc);
-                let cond_trunc = if cond_str.len() > 19 { &cond_str[..19] } else { &cond_str };
                 let temp_range = format!("{:>4.1}° - {:>4.1}°C", d.temp_min, d.temp_max);
 
                 lines.push(
                     Line::from(vec![
                         Span::styled("    ", Style::default()),
                         Span::styled(format!("{:<12}", d.day_name), Style::default().fg(Color::Rgb(94, 129, 172)).add_modifier(Modifier::BOLD)),
-                        Span::styled(format!(" {:<17}", temp_range), Style::default().fg(Color::Rgb(229, 233, 240))),
-                        Span::styled(format!(" {:<20}", cond_trunc), Style::default().fg(Color::Rgb(143, 188, 187))),
-                        Span::styled(format!(" {:>3}%   ", d.precip_prob), Style::default().fg(Color::Rgb(129, 161, 193))),
-                        Span::styled(format!(" {:>4.1} km/h", d.wind_speed), Style::default().fg(Color::Rgb(229, 233, 240))),
+                        Span::styled(format!(" {:<18}", temp_range), Style::default().fg(Color::Rgb(229, 233, 240))),
+                        Span::styled(format!(" {} {}", d_badge, d_desc), Style::default().fg(Color::Rgb(143, 188, 187))),
                     ])
                 );
             }
@@ -997,35 +1031,6 @@ fn render_weather_modal(f: &mut Frame, area: Rect, weather: &WeatherFetcher, _co
         }
     }
 
-    // 5. Comparative Station Block (Santiago)
-    if !is_compact {
-        if let Some(ref stgo) = snapshot.santiago {
-            let (stgo_badge, stgo_desc) = weathercode_description(stgo.weathercode);
-            lines.push(
-                Line::from(vec![
-                    Span::styled("──────────── ", Style::default().fg(Color::Rgb(94, 129, 172))),
-                    Span::styled("Comparative Station", Style::default().fg(Color::Rgb(143, 188, 187)).add_modifier(Modifier::BOLD)),
-                    Span::styled(" ────────────", Style::default().fg(Color::Rgb(94, 129, 172))),
-                ])
-                .alignment(Alignment::Center),
-            );
-            lines.push(
-                Line::from(vec![
-                    Span::styled("    ", Style::default()),
-                    Span::styled("Santiago Capital: ", Style::default().fg(Color::Rgb(94, 129, 172)).add_modifier(Modifier::BOLD)),
-                    Span::styled(format!("{:.1}°C", stgo.temp), Style::default().fg(Color::Rgb(229, 233, 240))),
-                    Span::styled("   │   ", Style::default().fg(Color::Rgb(94, 129, 172))),
-                    Span::styled("Condition: ", Style::default().fg(Color::Rgb(129, 161, 193)).add_modifier(Modifier::BOLD)),
-                    Span::styled(format!("{} {}", stgo_badge, stgo_desc), Style::default().fg(Color::Rgb(143, 188, 187))),
-                    Span::styled("   │   ", Style::default().fg(Color::Rgb(94, 129, 172))),
-                    Span::styled("Wind: ", Style::default().fg(Color::Rgb(129, 161, 193)).add_modifier(Modifier::BOLD)),
-                    Span::styled(format!("{:.1} km/h", stgo.wind_speed), Style::default().fg(Color::Rgb(229, 233, 240))),
-                ])
-            );
-            lines.push(Line::from(""));
-        }
-    }
-
     // 6. Navigation Footer
     lines.push(
         Line::from(vec![
@@ -1041,7 +1046,7 @@ fn render_weather_modal(f: &mut Frame, area: Rect, weather: &WeatherFetcher, _co
         .alignment(Alignment::Center),
     );
 
-    let modal_width = 76.min(area.width.saturating_sub(4));
+    let modal_width = 72.min(area.width.saturating_sub(4));
     let modal_height = (lines.len() as u16 + 2).min(area.height.saturating_sub(2));
     let rect = centered_rect(modal_width, modal_height, area);
 

@@ -21,6 +21,13 @@ pub enum WeatherCondition {
     Snow,
 }
 
+#[derive(Debug, Clone)]
+pub struct HourlyForecast {
+    pub time_label: String,
+    pub temp: f64,
+    pub weathercode: u8,
+}
+
 #[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct DailyForecast {
@@ -29,18 +36,13 @@ pub struct DailyForecast {
     pub temp_max: f64,
     pub temp_min: f64,
     pub weathercode: u8,
-    pub precip_prob: u8,
-    pub wind_speed: f64,
 }
 
 #[derive(Debug, Clone)]
 pub struct WeatherData {
     pub temp: f64,
     pub weathercode: u8,
-    pub wind_speed: f64,
-    pub wind_direction: f64,
-    pub humidity: Option<f64>,
-    pub pressure: Option<f64>,
+    pub hourly: Vec<HourlyForecast>,
     pub daily: Vec<DailyForecast>,
 }
 
@@ -48,11 +50,8 @@ pub struct WeatherData {
 #[derive(Debug, Clone)]
 pub struct DetailedForecastSnapshot {
     pub location_name: String,
-    pub lat: f64,
-    pub lon: f64,
     pub last_updated: Option<String>,
     pub primary: Option<WeatherData>,
-    pub santiago: Option<WeatherData>,
     pub is_fetching: bool,
 }
 
@@ -84,32 +83,10 @@ pub fn weathercode_description(code: u8) -> (&'static str, &'static str) {
     }
 }
 
-pub fn wind_dir_to_cardinal(deg: f64) -> &'static str {
-    let d = deg.rem_euclid(360.0);
-    if (337.5..=360.0).contains(&d) || (0.0..22.5).contains(&d) {
-        "N"
-    } else if (22.5..67.5).contains(&d) {
-        "NE"
-    } else if (67.5..112.5).contains(&d) {
-        "E"
-    } else if (112.5..157.5).contains(&d) {
-        "SE"
-    } else if (157.5..202.5).contains(&d) {
-        "S"
-    } else if (202.5..247.5).contains(&d) {
-        "SW"
-    } else if (247.5..292.5).contains(&d) {
-        "W"
-    } else {
-        "NW"
-    }
-}
-
 pub struct CacheState {
     pub gnome_loc: Option<GnomeLocation>,
     pub ip_city: Option<String>,
     pub primary_data: Option<WeatherData>,
-    pub santiago_data: Option<WeatherData>,
     pub last_fetch: Option<std::time::Instant>,
     pub is_fetching: bool,
     pub cached_condition: WeatherCondition,
@@ -126,7 +103,7 @@ pub struct WeatherFetcher {
 impl WeatherFetcher {
     pub fn new(enabled: bool, manual_city: String) -> Self {
         let default_info = if enabled {
-            "Concepción · Updating...  │  Santiago · Updating...".to_string()
+            "Concepción · Updating...".to_string()
         } else {
             "Offline Mode".to_string()
         };
@@ -136,7 +113,6 @@ impl WeatherFetcher {
                 gnome_loc: None,
                 ip_city: None,
                 primary_data: None,
-                santiago_data: None,
                 last_fetch: None,
                 is_fetching: false,
                 cached_condition: WeatherCondition::Clear,
@@ -194,7 +170,6 @@ impl WeatherFetcher {
             };
 
             let primary = Self::fetch_open_meteo(req_lat, req_lon, client.as_ref());
-            let santiago = Self::fetch_open_meteo(-33.4489, -70.6693, client.as_ref());
 
             if let Ok(mut guard) = cache_clone.lock() {
                 if gnome_loc.is_some() {
@@ -205,9 +180,6 @@ impl WeatherFetcher {
                 }
                 if primary.is_some() {
                     guard.primary_data = primary.clone();
-                }
-                if santiago.is_some() {
-                    guard.santiago_data = santiago;
                 }
 
                 let condition = match guard.primary_data.as_ref().map(|d| d.weathercode) {
@@ -235,12 +207,7 @@ impl WeatherFetcher {
                     None => "Updating...".to_string(),
                 };
 
-                let s_str = match guard.santiago_data {
-                    Some(ref d) => format!("{:.1}°C", d.temp),
-                    None => "Updating...".to_string(),
-                };
-
-                guard.cached_info = format!("{} · {}  │  Santiago · {}", city, p_str, s_str);
+                guard.cached_info = format!("{} · {}", city, p_str);
                 guard.last_fetch = Some(std::time::Instant::now());
                 guard.is_fetching = false;
             }
@@ -329,7 +296,7 @@ impl WeatherFetcher {
     fn fetch_open_meteo(lat: f64, lon: f64, client: Option<&reqwest::blocking::Client>) -> Option<WeatherData> {
         let client = client?;
         let url = format!(
-            "https://api.open-meteo.com/v1/forecast?latitude={:.4}&longitude={:.4}&current_weather=true&hourly=relativehumidity_2m,surface_pressure&daily=weathercode,temperature_2m_max,temperature_2m_min,precipitation_probability_max,windspeed_10m_max&timezone=auto",
+            "https://api.open-meteo.com/v1/forecast?latitude={:.4}&longitude={:.4}&current_weather=true&hourly=temperature_2m,weathercode&daily=weathercode,temperature_2m_max,temperature_2m_min&timezone=auto",
             lat, lon
         );
 
@@ -337,10 +304,42 @@ impl WeatherFetcher {
         let json: serde_json::Value = resp.json().ok()?;
         let temp = json["current_weather"]["temperature"].as_f64()?;
         let weathercode = json["current_weather"]["weathercode"].as_u64().unwrap_or(0) as u8;
-        let wind_speed = json["current_weather"]["windspeed"].as_f64().unwrap_or(0.0);
-        let wind_direction = json["current_weather"]["winddirection"].as_f64().unwrap_or(0.0);
-        let humidity = json["hourly"]["relativehumidity_2m"].as_array().and_then(|a| a.first()).and_then(|v| v.as_f64());
-        let pressure = json["hourly"]["surface_pressure"].as_array().and_then(|a| a.first()).and_then(|v| v.as_f64());
+        let cur_time = json["current_weather"]["time"].as_str().unwrap_or("");
+
+        let mut hourly = Vec::new();
+        if let (Some(h_times), Some(h_temps), Some(h_codes)) = (
+            json["hourly"]["time"].as_array(),
+            json["hourly"]["temperature_2m"].as_array(),
+            json["hourly"]["weathercode"].as_array(),
+        ) {
+            let start_idx = h_times
+                .iter()
+                .position(|t| t.as_str().unwrap_or("") >= cur_time)
+                .unwrap_or(0);
+
+            for i in 0..10 {
+                let idx = start_idx + i;
+                if idx < h_times.len() {
+                    let raw_time = h_times[idx].as_str().unwrap_or("");
+                    let time_label = if i == 0 {
+                        "Now".to_string()
+                    } else if let Some(t_part) = raw_time.split('T').nth(1) {
+                        t_part.to_string()
+                    } else {
+                        format!("+{}h", i)
+                    };
+
+                    let h_temp = h_temps.get(idx).and_then(|v| v.as_f64()).unwrap_or(temp);
+                    let h_code = h_codes.get(idx).and_then(|v| v.as_u64()).unwrap_or(weathercode as u64) as u8;
+
+                    hourly.push(HourlyForecast {
+                        time_label,
+                        temp: h_temp,
+                        weathercode: h_code,
+                    });
+                }
+            }
+        }
 
         let mut daily = Vec::new();
         if let (Some(times), Some(maxs), Some(mins), Some(codes)) = (
@@ -349,9 +348,6 @@ impl WeatherFetcher {
             json["daily"]["temperature_2m_min"].as_array(),
             json["daily"]["weathercode"].as_array(),
         ) {
-            let precip_arr = json["daily"]["precipitation_probability_max"].as_array();
-            let wind_arr = json["daily"]["windspeed_10m_max"].as_array();
-
             for i in 0..times.len().min(5) {
                 let date_str = times[i].as_str().unwrap_or("").to_string();
                 let day_name = if i == 0 {
@@ -367,8 +363,6 @@ impl WeatherFetcher {
                 let t_max = maxs.get(i).and_then(|v| v.as_f64()).unwrap_or(temp);
                 let t_min = mins.get(i).and_then(|v| v.as_f64()).unwrap_or(temp);
                 let code = codes.get(i).and_then(|v| v.as_u64()).unwrap_or(weathercode as u64) as u8;
-                let precip = precip_arr.and_then(|a| a.get(i)).and_then(|v| v.as_u64()).unwrap_or(0) as u8;
-                let w_speed = wind_arr.and_then(|a| a.get(i)).and_then(|v| v.as_f64()).unwrap_or(wind_speed);
 
                 daily.push(DailyForecast {
                     date: date_str,
@@ -376,8 +370,6 @@ impl WeatherFetcher {
                     temp_max: t_max,
                     temp_min: t_min,
                     weathercode: code,
-                    precip_prob: precip,
-                    wind_speed: w_speed,
                 });
             }
         }
@@ -385,22 +377,13 @@ impl WeatherFetcher {
         Some(WeatherData {
             temp,
             weathercode,
-            wind_speed,
-            wind_direction,
-            humidity,
-            pressure,
+            hourly,
             daily,
         })
     }
 
     pub fn get_detailed_snapshot(&self) -> DetailedForecastSnapshot {
         if let Ok(guard) = self.cache.lock() {
-            let (lat, lon) = if let Some(ref g) = guard.gnome_loc {
-                (g.lat, g.lon)
-            } else {
-                (-36.8335, -73.0487)
-            };
-
             let location_name = if !self.manual_city.is_empty() {
                 self.manual_city.clone()
             } else if let Some(ref g) = guard.gnome_loc {
@@ -418,21 +401,15 @@ impl WeatherFetcher {
 
             DetailedForecastSnapshot {
                 location_name,
-                lat,
-                lon,
                 last_updated,
                 primary: guard.primary_data.clone(),
-                santiago: guard.santiago_data.clone(),
                 is_fetching: guard.is_fetching,
             }
         } else {
             DetailedForecastSnapshot {
                 location_name: DEFAULT_CITY_NAME.to_string(),
-                lat: -36.8335,
-                lon: -73.0487,
                 last_updated: None,
                 primary: None,
-                santiago: None,
                 is_fetching: false,
             }
         }
