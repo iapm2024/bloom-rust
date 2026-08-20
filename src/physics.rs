@@ -290,27 +290,6 @@ impl ParticleEngine {
         self.set_feedback("Wind Gust Surge Triggered");
     }
 
-    pub fn adjust_density(&mut self, delta: i32, tree_grid: &[Vec<char>]) {
-        let new_count = (self.target_count as i32 + delta).clamp(30, 350) as usize;
-        self.target_count = new_count;
-        let mut rng = rand::thread_rng();
-        if self.leaves.len() > self.target_count {
-            self.leaves.truncate(self.target_count);
-        } else {
-            while self.leaves.len() < self.target_count {
-                let mut p = Self::create_particle(self.width, self.height, self.speed, tree_grid, &mut rng);
-                p.y = rng.gen_range(0.0..(self.height as f32).max(1.0));
-                self.leaves.push(p);
-            }
-        }
-        self.set_feedback(format!("Petal Density: {} blossoms", self.target_count));
-    }
-
-    pub fn adjust_speed(&mut self, delta: f32) {
-        self.speed = (self.speed + delta).clamp(0.2, 5.0);
-        self.set_feedback(format!("Fall Speed: {:.1}x", self.speed));
-    }
-
     pub fn cycle_sway(&mut self) {
         let (new_sway, label) = if self.sway < 0.8 {
             (1.0, "1.0x (Moderate Breeze)")

@@ -63,11 +63,9 @@ Options:
 | `3` | Switch to **Autumn** (Aurora Crimson & Gold) |
 | `4` | Switch to **Winter** (Frost Cyan & Pure Snow) |
 | `m` / `M` | Toggle **Day / Night** mood palette |
-| `o` / `F` | Toggle **Weather & Forecast Pop-Up Modal** |
+| `o` / `f` | Toggle **Weather & Forecast Pop-Up Modal** |
 | `r` / `R` | Force **Live Weather Telemetry Refresh** |
 | `g` / `G` | Trigger instant **Wind Gust Surge** |
-| `+` / `-` | Increase / decrease **Blossom Density** (30 to 350 petals) |
-| `f` / `s` | Faster / slower **Falling Drift Speed** |
 | `w` / `W` | Cycle **Wind Sway Magnitude** (Calm / Moderate / Blustery / Stormy) |
 | `a` / `?` | Toggle About & Shortcuts overlay |
 | `q` / `Esc` | Quit screensaver |

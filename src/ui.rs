@@ -773,11 +773,9 @@ fn render_about_modal(f: &mut Frame, area: Rect, _config: &AppConfig) {
     let shortcuts = [
         ("1, 2, 3, 4", "Spring / Summer / Autumn / Winter"),
         ("m", "Toggle Day / Night Mood"),
-        ("o, F", "Weather Forecast Pop-up"),
+        ("o, f", "Weather Forecast Pop-up"),
         ("r", "Refresh Live Weather Data"),
         ("g", "Trigger Wind Gust Surge"),
-        ("+ / -", "Adjust Blossom Density"),
-        ("f / s", "Faster / Slower Fall Speed"),
         ("w", "Cycle Wind Sway Intensity"),
         ("a, ?", "Toggle About Overlay"),
         ("q, Esc", "Quit Screensaver"),
@@ -960,7 +958,7 @@ fn render_weather_modal(f: &mut Frame, area: Rect, weather: &WeatherFetcher, _co
     // 6. Navigation Footer
     lines.push(
         Line::from(vec![
-            Span::styled("[ o / F / Esc ] ", Style::default().fg(Color::Rgb(136, 192, 208)).add_modifier(Modifier::BOLD)),
+            Span::styled("[ o / f / Esc ] ", Style::default().fg(Color::Rgb(136, 192, 208)).add_modifier(Modifier::BOLD)),
             Span::styled("Close Forecast Overlay", Style::default().fg(Color::Rgb(229, 233, 240))),
             Span::styled("   │   ", Style::default().fg(Color::Rgb(94, 129, 172))),
             Span::styled("[ r ] ", Style::default().fg(Color::Rgb(136, 192, 208)).add_modifier(Modifier::BOLD)),

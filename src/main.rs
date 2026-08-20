@@ -116,7 +116,7 @@ fn main() -> Result<()> {
                                     show_weather = false;
                                 }
                             }
-                            KeyCode::Char('o') | KeyCode::Char('O') | KeyCode::Char('F') => {
+                            KeyCode::Char('o') | KeyCode::Char('O') | KeyCode::Char('f') | KeyCode::Char('F') => {
                                 show_weather = !show_weather;
                                 if show_weather {
                                     show_about = false;
@@ -141,24 +141,10 @@ fn main() -> Result<()> {
                                 config.mood = match config.mood {
                                     config::Mood::Day => config::Mood::Night,
                                     config::Mood::Night => config::Mood::Day,
-                                    };
+                                };
                             }
                             KeyCode::Char('g') | KeyCode::Char('G') => {
                                 particles.trigger_gust();
-                            }
-                            KeyCode::Char('+') | KeyCode::Char('=') | KeyCode::Char(']') => {
-                                particles.adjust_density(20, &tree_grid);
-                            }
-                            KeyCode::Char('-') | KeyCode::Char('_') | KeyCode::Char('[') => {
-                                particles.adjust_density(-20, &tree_grid);
-                            }
-                            KeyCode::Char('f') => {
-                                particles.adjust_speed(0.2);
-                                config.speed = particles.speed;
-                            }
-                            KeyCode::Char('s') | KeyCode::Char('S') => {
-                                particles.adjust_speed(-0.2);
-                                config.speed = particles.speed;
                             }
                             KeyCode::Char('w') | KeyCode::Char('W') => {
                                 particles.cycle_sway();
