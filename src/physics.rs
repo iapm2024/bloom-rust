@@ -222,12 +222,14 @@ pub struct ParticleEngine {
     pub gust_timer: f32,
     pub gust_duration: f32,
     pub current_wind: f32,
+    pub target_count: usize,
+    pub feedback_msg: Option<(String, std::time::Instant)>,
 }
 
 impl ParticleEngine {
     pub fn new(tree_grid: &[Vec<char>], width: u16, height: u16, speed: f32, sway: f32) -> Self {
         let mut engine = Self {
-            leaves: Vec::with_capacity(256),
+            leaves: Vec::with_capacity(384),
             settled: Vec::with_capacity(256),
             wind_streaks: Vec::with_capacity(32),
             terrain: TerrainProfile::new(width, height),
@@ -242,9 +244,83 @@ impl ParticleEngine {
             gust_timer: 6.0,
             gust_duration: 4.0,
             current_wind: 0.0,
+            target_count: 150,
+            feedback_msg: None,
         };
         engine.spawn_initial(tree_grid);
         engine
+    }
+
+    pub fn set_feedback(&mut self, text: impl Into<String>) {
+        self.feedback_msg = Some((text.into(), std::time::Instant::now()));
+    }
+
+    pub fn get_active_feedback(&self) -> Option<&str> {
+        if let Some((ref msg, instant)) = self.feedback_msg {
+            if instant.elapsed() < std::time::Duration::from_millis(1600) {
+                return Some(msg);
+            }
+        }
+        None
+    }
+
+    pub fn trigger_gust(&mut self) {
+        let mut rng = rand::thread_rng();
+        self.gust_duration = rng.gen_range(4.0..7.0);
+        self.gust_timer = self.gust_duration;
+        self.gust_intensity = 2.4;
+        self.gust_direction = if rng.gen_bool(0.85) { 1.0 } else { -1.0 };
+
+        let streak_chars = ['~', '≈', '>', '»', '-'];
+        for _ in 0..6 {
+            let ch = streak_chars[rng.gen_range(0..streak_chars.len())];
+            let start_x = if self.gust_direction >= 0.0 { 0.0 } else { self.width as f32 };
+            self.wind_streaks.push(WindStreak {
+                x: start_x,
+                y: rng.gen_range(2.0..(self.height.saturating_sub(3) as f32).max(3.0)),
+                speed: (self.gust_intensity * 3.2 + rng.gen_range(2.0..4.5)) * self.gust_direction,
+                life: 0.0,
+                max_life: rng.gen_range(1.2..2.2),
+                ch,
+            });
+        }
+        self.set_feedback("Wind Gust Surge Triggered");
+    }
+
+    pub fn adjust_density(&mut self, delta: i32, tree_grid: &[Vec<char>]) {
+        let new_count = (self.target_count as i32 + delta).clamp(30, 350) as usize;
+        self.target_count = new_count;
+        let mut rng = rand::thread_rng();
+        if self.leaves.len() > self.target_count {
+            self.leaves.truncate(self.target_count);
+        } else {
+            while self.leaves.len() < self.target_count {
+                let mut p = Self::create_particle(self.width, self.height, self.speed, tree_grid, &mut rng);
+                p.y = rng.gen_range(0.0..(self.height as f32).max(1.0));
+                self.leaves.push(p);
+            }
+        }
+        self.set_feedback(format!("Petal Density: {} blossoms", self.target_count));
+    }
+
+    pub fn adjust_speed(&mut self, delta: f32) {
+        self.speed = (self.speed + delta).clamp(0.2, 5.0);
+        self.set_feedback(format!("Fall Speed: {:.1}x", self.speed));
+    }
+
+    pub fn cycle_sway(&mut self) {
+        let (new_sway, label) = if self.sway < 0.8 {
+            (1.0, "1.0x (Moderate Breeze)")
+        } else if self.sway < 1.8 {
+            (2.2, "2.2x (Blustery Gale)")
+        } else if self.sway < 2.8 {
+            (3.5, "3.5x (Stormy Gusts)")
+        } else {
+            (0.5, "0.5x (Calm Drift)")
+        };
+        self.sway = new_sway;
+        self.sway_amplitude = new_sway * 1.5;
+        self.set_feedback(format!("Wind Sway: {}", label));
     }
 
     pub fn resize(&mut self, width: u16, height: u16) {
@@ -257,7 +333,7 @@ impl ParticleEngine {
 
     fn spawn_initial(&mut self, tree_grid: &[Vec<char>]) {
         let mut rng = rand::thread_rng();
-        let target_count = 150;
+        let target_count = self.target_count;
         for _ in 0..target_count {
             let mut p = Self::create_particle(self.width, self.height, self.speed, tree_grid, &mut rng);
             p.y = rng.gen_range(0.0..(self.height as f32).max(1.0));
@@ -489,7 +565,7 @@ impl ParticleEngine {
         }
         self.settled.retain(|s| s.alpha > 0.0);
 
-        while self.leaves.len() < 150 {
+        while self.leaves.len() < self.target_count {
             self.leaves.push(Self::create_particle(width, height, speed, tree_grid, &mut rng));
         }
     }

@@ -122,6 +122,25 @@ fn main() -> Result<()> {
                                     config::Mood::Night => config::Mood::Day,
                                 };
                             }
+                            KeyCode::Char('g') | KeyCode::Char('G') => {
+                                particles.trigger_gust();
+                            }
+                            KeyCode::Char('+') | KeyCode::Char('=') | KeyCode::Char(']') => {
+                                particles.adjust_density(20, &tree_grid);
+                            }
+                            KeyCode::Char('-') | KeyCode::Char('_') | KeyCode::Char('[') => {
+                                particles.adjust_density(-20, &tree_grid);
+                            }
+                            KeyCode::Char('f') | KeyCode::Char('F') => {
+                                particles.adjust_speed(0.2);
+                            }
+                            KeyCode::Char('s') | KeyCode::Char('S') => {
+                                particles.adjust_speed(-0.2);
+                            }
+                            KeyCode::Char('w') | KeyCode::Char('W') => {
+                                particles.cycle_sway();
+                                config.sway = particles.sway;
+                            }
                             _ => {}
                         }
                     }

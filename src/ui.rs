@@ -301,22 +301,27 @@ pub fn render_ui(
     }
 
     // 11. Render Clean Status Bar Footer (bottom line, strictly non-emoji)
-    let now = Local::now();
-    let date_str = now.format("%A %d/%m/%Y").to_string();
-    let weather_str = weather.get_weather_info();
-    let season_str = match season {
-        Season::Spring => "Spring",
-        Season::Summer => "Summer",
-        Season::Autumn => "Autumn",
-        Season::Winter => "Winter",
-        Season::Auto => "Auto",
-    };
-    let status_line = format!("{}  │  {}  │  {}", date_str, weather_str, season_str);
-
     let footer_rect = Rect::new(0, area.height.saturating_sub(1), area.width, 1);
-    let footer_p = Paragraph::new(status_line)
-        .alignment(Alignment::Center)
-        .style(Style::default().fg(Color::Rgb(129, 161, 193)).bg(nord_bg).add_modifier(Modifier::BOLD));
+    let footer_p = if let Some(feedback) = particles.get_active_feedback() {
+        Paragraph::new(format!("─── [ {} ] ───", feedback))
+            .alignment(Alignment::Center)
+            .style(Style::default().fg(Color::Rgb(136, 192, 208)).bg(nord_bg).add_modifier(Modifier::BOLD))
+    } else {
+        let now = Local::now();
+        let date_str = now.format("%A %d/%m/%Y").to_string();
+        let weather_str = weather.get_weather_info();
+        let season_str = match season {
+            Season::Spring => "Spring",
+            Season::Summer => "Summer",
+            Season::Autumn => "Autumn",
+            Season::Winter => "Winter",
+            Season::Auto => "Auto",
+        };
+        let status_line = format!("{}  │  {}  │  {}", date_str, weather_str, season_str);
+        Paragraph::new(status_line)
+            .alignment(Alignment::Center)
+            .style(Style::default().fg(Color::Rgb(129, 161, 193)).bg(nord_bg).add_modifier(Modifier::BOLD))
+    };
     f.render_widget(footer_p, footer_rect);
 
     // 12. Render About Modal Overlay if toggled
@@ -689,6 +694,10 @@ fn render_about_modal(f: &mut Frame, area: Rect, _config: &AppConfig) {
     let shortcuts = [
         ("1, 2, 3, 4", "Spring / Summer / Autumn / Winter"),
         ("m", "Toggle Day / Night Mood"),
+        ("g", "Trigger Wind Gust Surge"),
+        ("+ / -", "Adjust Blossom Density"),
+        ("f / s", "Faster / Slower Fall Speed"),
+        ("w", "Cycle Wind Sway Intensity"),
         ("a, ?", "Toggle About Overlay"),
         ("q, Esc", "Quit Screensaver"),
     ];
