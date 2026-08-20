@@ -12,6 +12,61 @@ use crate::stars::StarrySky;
 use crate::weather::{WeatherCondition, WeatherFetcher, WeatherFxEngine, WeatherFxKind};
 use chrono::{Datelike, Local};
 
+use std::cell::RefCell;
+
+#[derive(Default)]
+pub struct TreeColorCache {
+    cached_season: Option<Season>,
+    cached_mood: Option<Mood>,
+    cached_grid_hash: usize,
+    pub color_grid: Vec<Vec<Color>>,
+}
+
+impl TreeColorCache {
+    pub fn get_or_compute(
+        &mut self,
+        tree_grid: &[Vec<char>],
+        season: Season,
+        mood: Mood,
+    ) -> &[Vec<Color>] {
+        let grid_len = tree_grid.len();
+        let needs_recompute = self.cached_season != Some(season)
+            || self.cached_mood != Some(mood)
+            || self.cached_grid_hash != grid_len
+            || self.color_grid.is_empty();
+
+        if needs_recompute {
+            let art_height = tree_grid.len();
+            let art_width = tree_grid.iter().map(|r| r.len()).max().unwrap_or(80);
+            let mut new_grid = Vec::with_capacity(art_height);
+
+            for (r, row) in tree_grid.iter().enumerate() {
+                let mut row_colors = Vec::with_capacity(row.len());
+                for (c, &ch) in row.iter().enumerate() {
+                    if ch == ' ' {
+                        row_colors.push(Color::Reset);
+                    } else {
+                        let col = compute_tree_char_color(ch, r, c, art_height, art_width, season, mood);
+                        row_colors.push(col);
+                    }
+                }
+                new_grid.push(row_colors);
+            }
+
+            self.color_grid = new_grid;
+            self.cached_season = Some(season);
+            self.cached_mood = Some(mood);
+            self.cached_grid_hash = grid_len;
+        }
+
+        &self.color_grid
+    }
+}
+
+thread_local! {
+    static TREE_COLOR_CACHE: RefCell<TreeColorCache> = RefCell::new(TreeColorCache::default());
+}
+
 #[inline]
 fn set_cell(buf: &mut ratatui::buffer::Buffer, x: u16, y: u16, ch: char, fg: Color, bg: Color) {
     if x < buf.area.width && y < buf.area.height {
@@ -115,93 +170,114 @@ pub fn render_ui(
         }
     }
 
-    // 5. Render Static Tree Matrix (Adaptive scaling: 1:1 if it fits, or proportional downsampling)
+    // 5. Render Static Tree Matrix with Cached Colors & High-Performance Row-Level Sway
     let art_height = tree_grid.len();
     let art_width = tree_grid.iter().map(|r| r.len()).max().unwrap_or(80);
     let target_height = area.height.saturating_sub(1) as usize;
 
-    if art_height <= target_height {
-        // 1:1 scale rendering with harmonic canopy sway & branch flutter
-        let offset_x = (area.width as usize).saturating_sub(art_width) / 2;
-        let offset_y = target_height - art_height;
+    TREE_COLOR_CACHE.with(|cache_cell| {
+        let mut cache = cache_cell.borrow_mut();
+        let tree_colors = cache.get_or_compute(tree_grid, season, config.mood);
 
-        for (r, row) in tree_grid.iter().enumerate() {
-            let py = (offset_y + r) as u16;
-            if py >= area.height.saturating_sub(1) {
-                break;
-            }
+        if art_height <= target_height {
+            // 1:1 scale rendering with harmonic canopy sway & branch flutter
+            let offset_x = (area.width as usize).saturating_sub(art_width) / 2;
+            let offset_y = target_height - art_height;
 
-            for (c, &ch) in row.iter().enumerate() {
-                if ch == ' ' {
-                    continue;
+            for (r, row) in tree_grid.iter().enumerate() {
+                let py = (offset_y + r) as u16;
+                if py >= area.height.saturating_sub(1) {
+                    break;
                 }
 
-                let sway_dx = compute_tree_sway(
+                let (row_sway, h_frac) = compute_tree_row_sway(
                     r,
-                    c,
                     art_height,
-                    art_width,
                     particles.time,
                     particles.sway,
                     particles.gust_intensity,
                     particles.gust_direction,
                 );
 
-                let px_i32 = offset_x as i32 + c as i32 + sway_dx;
-                if px_i32 >= 0 && px_i32 < area.width as i32 {
-                    let px = px_i32 as u16;
-                    let color = get_tree_char_color(ch, r, c, art_height, art_width, season, config.mood);
-                    set_cell(buf, px, py, ch, color, nord_bg);
+                for (c, &ch) in row.iter().enumerate() {
+                    if ch == ' ' {
+                        continue;
+                    }
+
+                    let sway_dx = compute_char_sway(
+                        row_sway,
+                        h_frac,
+                        r,
+                        c,
+                        art_width,
+                        particles.time,
+                        particles.sway,
+                    );
+
+                    let px_i32 = offset_x as i32 + c as i32 + sway_dx;
+                    if px_i32 >= 0 && px_i32 < area.width as i32 {
+                        let px = px_i32 as u16;
+                        let color = tree_colors.get(r).and_then(|rc| rc.get(c)).copied().unwrap_or(Color::Reset);
+                        set_cell(buf, px, py, ch, color, nord_bg);
+                    }
                 }
             }
-        }
-    } else {
-        // Proportional Scaling to fit inside small terminal height with organic sway
-        let step_y = if target_height > 1 {
-            (art_height - 1) as f32 / (target_height - 1) as f32
         } else {
-            1.0
-        };
-        let step_x = (art_width as f32 / area.width.max(1) as f32).max(1.0);
+            // Proportional Scaling to fit inside small terminal height with organic sway
+            let step_y = if target_height > 1 {
+                (art_height - 1) as f32 / (target_height - 1) as f32
+            } else {
+                1.0
+            };
+            let step_x = (art_width as f32 / area.width.max(1) as f32).max(1.0);
 
-        let scaled_width = (art_width as f32 / step_x).ceil() as u16;
-        let offset_x = (area.width.saturating_sub(scaled_width)) / 2;
+            let scaled_width = (art_width as f32 / step_x).ceil() as u16;
+            let offset_x = (area.width.saturating_sub(scaled_width)) / 2;
 
-        for by in 0..target_height {
-            let sy = ((by as f32 * step_y).round() as usize).min(art_height.saturating_sub(1));
-            if sy < tree_grid.len() {
-                let row = &tree_grid[sy];
-                let row_len = row.len();
-                let scaled_cols = (row_len as f32 / step_x).ceil() as usize;
+            for by in 0..target_height {
+                let sy = ((by as f32 * step_y).round() as usize).min(art_height.saturating_sub(1));
+                if sy < tree_grid.len() {
+                    let row = &tree_grid[sy];
+                    let row_len = row.len();
+                    let scaled_cols = (row_len as f32 / step_x).ceil() as usize;
 
-                for bx in 0..scaled_cols {
-                    let sx = ((bx as f32 * step_x).round() as usize).min(row_len.saturating_sub(1));
-                    let ch = row[sx];
-                    if ch != ' ' {
-                        let sway_dx = compute_tree_sway(
-                            sy,
-                            sx,
-                            art_height,
-                            art_width,
-                            particles.time,
-                            particles.sway,
-                            particles.gust_intensity,
-                            particles.gust_direction,
-                        );
+                    let (row_sway, h_frac) = compute_tree_row_sway(
+                        sy,
+                        art_height,
+                        particles.time,
+                        particles.sway,
+                        particles.gust_intensity,
+                        particles.gust_direction,
+                    );
 
-                        let px_i32 = offset_x as i32 + bx as i32 + sway_dx;
-                        let py = by as u16;
+                    for bx in 0..scaled_cols {
+                        let sx = ((bx as f32 * step_x).round() as usize).min(row_len.saturating_sub(1));
+                        let ch = row[sx];
+                        if ch != ' ' {
+                            let sway_dx = compute_char_sway(
+                                row_sway,
+                                h_frac,
+                                sy,
+                                sx,
+                                art_width,
+                                particles.time,
+                                particles.sway,
+                            );
 
-                        if px_i32 >= 0 && px_i32 < area.width as i32 && py < area.height.saturating_sub(1) {
-                            let px = px_i32 as u16;
-                            let color = get_tree_char_color(ch, sy, sx, art_height, art_width, season, config.mood);
-                            set_cell(buf, px, py, ch, color, nord_bg);
+                            let px_i32 = offset_x as i32 + bx as i32 + sway_dx;
+                            let py = by as u16;
+
+                            if px_i32 >= 0 && px_i32 < area.width as i32 && py < area.height.saturating_sub(1) {
+                                let px = px_i32 as u16;
+                                let color = tree_colors.get(sy).and_then(|rc| rc.get(sx)).copied().unwrap_or(Color::Reset);
+                                set_cell(buf, px, py, ch, color, nord_bg);
+                            }
                         }
                     }
                 }
             }
         }
-    }
+    });
 
     // 6. Render Organic Contoured Ground Terrain, Grass Tufts & Puddle Reflections
     render_terrain_and_puddles(buf, &particles.terrain, area, season, config.mood, nord_bg, current_condition, particles.time);
@@ -487,7 +563,7 @@ fn lerp_color(c1: Color, c2: Color, t: f32) -> Color {
     }
 }
 
-fn get_tree_char_color(
+fn compute_tree_char_color(
     ch: char,
     r: usize,
     c: usize,
@@ -746,37 +822,44 @@ fn render_about_modal(f: &mut Frame, area: Rect, _config: &AppConfig) {
     f.render_widget(paragraph, rect);
 }
 
-fn compute_tree_sway(
+#[inline]
+fn compute_tree_row_sway(
     r: usize,
-    c: usize,
     art_height: usize,
-    art_width: usize,
     time: f32,
     sway: f32,
     gust_intensity: f32,
     gust_direction: f32,
-) -> i32 {
+) -> (f32, f32) {
     let trunk_threshold = (art_height * 65) / 100;
     if r >= trunk_threshold {
+        return (0.0, 0.0);
+    }
+    let h_frac = (1.0 - (r as f32 / trunk_threshold as f32)).clamp(0.0, 1.0);
+    let ambient_wave = (time * 1.6 + (r as f32 * 0.12)).sin() * (0.6 * sway) * (h_frac * h_frac);
+    let gust_bend = gust_intensity * gust_direction * 1.5 * h_frac.powf(1.4);
+    (ambient_wave + gust_bend, h_frac)
+}
+
+#[inline]
+fn compute_char_sway(
+    row_base_sway: f32,
+    h_frac: f32,
+    r: usize,
+    c: usize,
+    art_width: usize,
+    time: f32,
+    sway: f32,
+) -> i32 {
+    if h_frac <= 0.0 {
         return 0;
     }
-
-    // Height factor: 0.0 at trunk threshold, 1.0 at top canopy
-    let h_frac = (1.0 - (r as f32 / trunk_threshold as f32)).clamp(0.0, 1.0);
-
-    // Distance from center column
     let center_c = (art_width as f32) * 0.5;
     let dist_c = ((c as f32 - center_c).abs() / center_c.max(1.0)).clamp(0.0, 1.0);
-
-    // 1. Ambient gentle harmonic sway
-    let ambient_wave = (time * 1.6 + (r as f32 * 0.12)).sin() * (0.6 * sway) * (h_frac * h_frac);
-
-    // 2. Gust bending
-    let gust_bend = gust_intensity * gust_direction * 1.5 * h_frac.powf(1.4);
-
-    // 3. Outer branch tips flutter
-    let tip_flutter = (time * 3.0 + (r * 5 + c) as f32 * 0.25).sin() * (0.45 * sway * dist_c * h_frac);
-
-    let total_displacement = (ambient_wave + gust_bend + tip_flutter).round() as i32;
-    total_displacement.clamp(-2, 2)
+    let tip_flutter = if dist_c > 0.25 {
+        (time * 3.0 + (r * 5 + c) as f32 * 0.25).sin() * (0.45 * sway * dist_c * h_frac)
+    } else {
+        0.0
+    };
+    (row_base_sway + tip_flutter).round().clamp(-2.0, 2.0) as i32
 }

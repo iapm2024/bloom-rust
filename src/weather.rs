@@ -362,6 +362,7 @@ pub struct WeatherFxEngine {
     pub width: u16,
     pub height: u16,
     pub time: f32,
+    splash_scratch: Vec<WeatherParticle>,
 }
 
 impl WeatherFxEngine {
@@ -371,6 +372,7 @@ impl WeatherFxEngine {
             width,
             height,
             time: 0.0,
+            splash_scratch: Vec::with_capacity(16),
         }
     }
 
@@ -382,6 +384,9 @@ impl WeatherFxEngine {
 
     pub fn tick(&mut self, condition: WeatherCondition, wind_force: f32) {
         self.time += 0.033;
+        if self.time > 100_000.0 {
+            self.time = self.time.rem_euclid(std::f32::consts::PI * 200.0);
+        }
         let mut rng = rand::thread_rng();
         use rand::Rng;
         let width = self.width;
@@ -438,13 +443,16 @@ impl WeatherFxEngine {
             }
         }
 
-        // 2. Ground Collision & Splashes
-        let mut new_splashes = Vec::with_capacity(16);
+        // 2. Ground Collision & Splashes (Using reusable scratch buffer)
+        self.splash_scratch.clear();
+        let max_w = width.saturating_sub(1) as f32;
+        let scratch_ref = &mut self.splash_scratch;
+
         self.particles.retain(|p| {
             if p.kind == WeatherFxKind::RainDrop && p.y >= ground_row {
-                if new_splashes.len() < 16 {
-                    new_splashes.push(WeatherParticle {
-                        x: p.x.clamp(0.0, width.saturating_sub(1) as f32),
+                if scratch_ref.len() < 16 {
+                    scratch_ref.push(WeatherParticle {
+                        x: p.x.clamp(0.0, max_w),
                         y: ground_row,
                         vx: 0.0,
                         vy: 0.0,
@@ -463,7 +471,7 @@ impl WeatherFxEngine {
             }
         });
 
-        self.particles.extend(new_splashes);
+        self.particles.append(&mut self.splash_scratch);
 
         // 3. Spawn New Condition-Specific Particles
         while self.particles.len() < target_count {

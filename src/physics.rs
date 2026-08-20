@@ -181,18 +181,21 @@ impl TerrainProfile {
 
     #[inline]
     pub fn get_ground_y(&self, x: u16) -> u16 {
-        let idx = (x as usize).min(self.ground_heights.len().saturating_sub(1));
-        if idx < self.ground_heights.len() {
-            self.ground_heights[idx]
-        } else {
-            self.height.saturating_sub(2)
+        let default_y = self.height.saturating_sub(2);
+        if self.ground_heights.is_empty() {
+            return default_y;
         }
+        let idx = (x as usize).min(self.ground_heights.len().saturating_sub(1));
+        self.ground_heights.get(idx).copied().unwrap_or(default_y)
     }
 
     pub fn add_petal_to_mound(&mut self, x: u16) {
+        if self.mound_levels.is_empty() {
+            return;
+        }
         let idx = (x as usize).min(self.mound_levels.len().saturating_sub(1));
-        if idx < self.mound_levels.len() {
-            self.mound_levels[idx] = (self.mound_levels[idx] + 0.35).min(3.0);
+        if let Some(m) = self.mound_levels.get_mut(idx) {
+            *m = (*m + 0.35).min(3.0);
         }
     }
 
@@ -376,6 +379,9 @@ impl ParticleEngine {
 
     pub fn tick(&mut self, tree_grid: &[Vec<char>]) {
         self.time += 0.033;
+        if self.time > 100_000.0 {
+            self.time = self.time.rem_euclid(std::f32::consts::PI * 200.0);
+        }
         let mut rng = rand::thread_rng();
         let width = self.width;
         let height = self.height;
@@ -435,13 +441,13 @@ impl ParticleEngine {
                 ParallaxLayer::Background => 0.65,
             };
 
-            p.phase += (0.05 + self.gust_intensity * 0.06) * p.speed;
+            p.phase = (p.phase + (0.05 + self.gust_intensity * 0.06) * p.speed).rem_euclid(std::f32::consts::PI * 2.0);
 
             // Aerodynamic angular velocity updates for rotational tumbling
             let wind_torque = self.current_wind * 0.08 * layer_mult;
             p.angular_velocity += wind_torque + ((p.phase + self.time * 2.5).sin() * 0.035 * layer_mult);
             p.angular_velocity *= 0.94; // Angular damping
-            p.angle += p.angular_velocity;
+            p.angle = (p.angle + p.angular_velocity).rem_euclid(std::f32::consts::PI * 2.0);
 
             match p.state {
                 LeafState::Attached => {
@@ -484,22 +490,44 @@ impl ParticleEngine {
                     let lift = (self.gust_intensity * 0.16 * ((self.time * 2.8 + p.phase).sin() + 0.4) * layer_mult).clamp(0.0, 0.35);
                     p.y += (p.vy - lift).max(0.06);
 
-                    // 4. Branch Collision & Deflection
+                    // 4. Branch Collision & Deflection (Full & Scaled Terminals)
                     let art_height = tree_grid.len();
                     let art_width = tree_grid.iter().map(|r| r.len()).max().unwrap_or(80);
                     let target_height = height.saturating_sub(1) as usize;
 
-                    if art_height <= target_height && p.y >= 0.0 && p.x >= 0.0 {
-                        let tree_offset_x = (width as usize).saturating_sub(art_width) / 2;
-                        let tree_offset_y = target_height - art_height;
+                    if p.y >= 0.0 && p.x >= 0.0 && art_height > 0 && art_width > 0 {
+                        let (tree_r, tree_c) = if art_height <= target_height {
+                            let tree_offset_x = (width as usize).saturating_sub(art_width) / 2;
+                            let tree_offset_y = target_height - art_height;
+                            let px_u = p.x.round() as usize;
+                            let py_u = p.y.round() as usize;
+                            if px_u >= tree_offset_x && py_u >= tree_offset_y {
+                                (Some(py_u - tree_offset_y), Some(px_u - tree_offset_x))
+                            } else {
+                                (None, None)
+                            }
+                        } else {
+                            let step_y = if target_height > 1 {
+                                (art_height - 1) as f32 / (target_height - 1) as f32
+                            } else {
+                                1.0
+                            };
+                            let step_x = (art_width as f32 / width.max(1) as f32).max(1.0);
+                            let scaled_width = (art_width as f32 / step_x).ceil() as usize;
+                            let offset_x = (width as usize).saturating_sub(scaled_width) / 2;
+                            let px_u = p.x.round() as usize;
+                            let py_u = p.y.round() as usize;
+                            if px_u >= offset_x && py_u < target_height {
+                                let bx = px_u - offset_x;
+                                let sy = ((py_u as f32 * step_y).round() as usize).min(art_height.saturating_sub(1));
+                                let sx = (bx as f32 * step_x).round() as usize;
+                                (Some(sy), Some(sx))
+                            } else {
+                                (None, None)
+                            }
+                        };
 
-                        let px_u = p.x.round() as usize;
-                        let py_u = p.y.round() as usize;
-
-                        if px_u >= tree_offset_x && py_u >= tree_offset_y {
-                            let tr = py_u - tree_offset_y;
-                            let tc = px_u - tree_offset_x;
-
+                        if let (Some(tr), Some(tc)) = (tree_r, tree_c) {
                             if tr < art_height && tc < tree_grid[tr].len() {
                                 let branch_ch = tree_grid[tr][tc];
                                 if matches!(branch_ch, '#' | '%' | '@' | '=') && rng.gen_bool(0.18) {

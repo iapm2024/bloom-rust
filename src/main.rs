@@ -133,9 +133,11 @@ fn main() -> Result<()> {
                             }
                             KeyCode::Char('f') | KeyCode::Char('F') => {
                                 particles.adjust_speed(0.2);
+                                config.speed = particles.speed;
                             }
                             KeyCode::Char('s') | KeyCode::Char('S') => {
                                 particles.adjust_speed(-0.2);
+                                config.speed = particles.speed;
                             }
                             KeyCode::Char('w') | KeyCode::Char('W') => {
                                 particles.cycle_sway();
