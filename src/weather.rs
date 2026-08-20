@@ -21,10 +21,88 @@ pub enum WeatherCondition {
     Snow,
 }
 
+#[allow(dead_code)]
+#[derive(Debug, Clone)]
+pub struct DailyForecast {
+    pub date: String,
+    pub day_name: String,
+    pub temp_max: f64,
+    pub temp_min: f64,
+    pub weathercode: u8,
+    pub precip_prob: u8,
+    pub wind_speed: f64,
+}
+
 #[derive(Debug, Clone)]
 pub struct WeatherData {
     pub temp: f64,
     pub weathercode: u8,
+    pub wind_speed: f64,
+    pub wind_direction: f64,
+    pub humidity: Option<f64>,
+    pub pressure: Option<f64>,
+    pub daily: Vec<DailyForecast>,
+}
+
+#[allow(dead_code)]
+#[derive(Debug, Clone)]
+pub struct DetailedForecastSnapshot {
+    pub location_name: String,
+    pub lat: f64,
+    pub lon: f64,
+    pub last_updated: Option<String>,
+    pub primary: Option<WeatherData>,
+    pub santiago: Option<WeatherData>,
+    pub is_fetching: bool,
+}
+
+pub fn weathercode_description(code: u8) -> (&'static str, &'static str) {
+    match code {
+        0 => ("[CLR]", "Clear Sky"),
+        1 => ("[CLR]", "Mainly Clear"),
+        2 => ("[SCT]", "Partly Cloudy"),
+        3 => ("[OVC]", "Overcast"),
+        45 => ("[FOG]", "Fog"),
+        48 => ("[FOG]", "Depositing Rime Fog"),
+        51 => ("[DZL]", "Light Drizzle"),
+        53 => ("[DZL]", "Moderate Drizzle"),
+        55 => ("[DZL]", "Dense Drizzle"),
+        56 | 57 => ("[FZ-DZL]", "Freezing Drizzle"),
+        61 => ("[RAIN]", "Slight Rain"),
+        63 => ("[RAIN]", "Moderate Rain"),
+        65 => ("[RAIN]", "Heavy Rain"),
+        66 | 67 => ("[FZ-RA]", "Freezing Rain"),
+        71 => ("[SNOW]", "Slight Snow Fall"),
+        73 => ("[SNOW]", "Moderate Snow Fall"),
+        75 => ("[SNOW]", "Heavy Snow Fall"),
+        77 => ("[SNOW]", "Snow Grains"),
+        80..=82 => ("[SHWR]", "Rain Showers"),
+        85 | 86 => ("[SH-SN]", "Snow Showers"),
+        95 => ("[T-STM]", "Thunderstorm"),
+        96 | 99 => ("[T-STM]", "Thunderstorm with Hail"),
+        _ => ("[CLR]", "Clear"),
+    }
+}
+
+pub fn wind_dir_to_cardinal(deg: f64) -> &'static str {
+    let d = deg.rem_euclid(360.0);
+    if (337.5..=360.0).contains(&d) || (0.0..22.5).contains(&d) {
+        "N"
+    } else if (22.5..67.5).contains(&d) {
+        "NE"
+    } else if (67.5..112.5).contains(&d) {
+        "E"
+    } else if (112.5..157.5).contains(&d) {
+        "SE"
+    } else if (157.5..202.5).contains(&d) {
+        "S"
+    } else if (202.5..247.5).contains(&d) {
+        "SW"
+    } else if (247.5..292.5).contains(&d) {
+        "W"
+    } else {
+        "NW"
+    }
 }
 
 pub struct CacheState {
@@ -251,7 +329,7 @@ impl WeatherFetcher {
     fn fetch_open_meteo(lat: f64, lon: f64, client: Option<&reqwest::blocking::Client>) -> Option<WeatherData> {
         let client = client?;
         let url = format!(
-            "https://api.open-meteo.com/v1/forecast?latitude={:.4}&longitude={:.4}&current_weather=true",
+            "https://api.open-meteo.com/v1/forecast?latitude={:.4}&longitude={:.4}&current_weather=true&hourly=relativehumidity_2m,surface_pressure&daily=weathercode,temperature_2m_max,temperature_2m_min,precipitation_probability_max,windspeed_10m_max&timezone=auto",
             lat, lon
         );
 
@@ -259,8 +337,105 @@ impl WeatherFetcher {
         let json: serde_json::Value = resp.json().ok()?;
         let temp = json["current_weather"]["temperature"].as_f64()?;
         let weathercode = json["current_weather"]["weathercode"].as_u64().unwrap_or(0) as u8;
+        let wind_speed = json["current_weather"]["windspeed"].as_f64().unwrap_or(0.0);
+        let wind_direction = json["current_weather"]["winddirection"].as_f64().unwrap_or(0.0);
+        let humidity = json["hourly"]["relativehumidity_2m"].as_array().and_then(|a| a.first()).and_then(|v| v.as_f64());
+        let pressure = json["hourly"]["surface_pressure"].as_array().and_then(|a| a.first()).and_then(|v| v.as_f64());
 
-        Some(WeatherData { temp, weathercode })
+        let mut daily = Vec::new();
+        if let (Some(times), Some(maxs), Some(mins), Some(codes)) = (
+            json["daily"]["time"].as_array(),
+            json["daily"]["temperature_2m_max"].as_array(),
+            json["daily"]["temperature_2m_min"].as_array(),
+            json["daily"]["weathercode"].as_array(),
+        ) {
+            let precip_arr = json["daily"]["precipitation_probability_max"].as_array();
+            let wind_arr = json["daily"]["windspeed_10m_max"].as_array();
+
+            for i in 0..times.len().min(5) {
+                let date_str = times[i].as_str().unwrap_or("").to_string();
+                let day_name = if i == 0 {
+                    "Today".to_string()
+                } else if i == 1 {
+                    "Tomorrow".to_string()
+                } else if let Ok(parsed_date) = chrono::NaiveDate::parse_from_str(&date_str, "%Y-%m-%d") {
+                    parsed_date.format("%A").to_string()
+                } else {
+                    format!("Day {}", i + 1)
+                };
+
+                let t_max = maxs.get(i).and_then(|v| v.as_f64()).unwrap_or(temp);
+                let t_min = mins.get(i).and_then(|v| v.as_f64()).unwrap_or(temp);
+                let code = codes.get(i).and_then(|v| v.as_u64()).unwrap_or(weathercode as u64) as u8;
+                let precip = precip_arr.and_then(|a| a.get(i)).and_then(|v| v.as_u64()).unwrap_or(0) as u8;
+                let w_speed = wind_arr.and_then(|a| a.get(i)).and_then(|v| v.as_f64()).unwrap_or(wind_speed);
+
+                daily.push(DailyForecast {
+                    date: date_str,
+                    day_name,
+                    temp_max: t_max,
+                    temp_min: t_min,
+                    weathercode: code,
+                    precip_prob: precip,
+                    wind_speed: w_speed,
+                });
+            }
+        }
+
+        Some(WeatherData {
+            temp,
+            weathercode,
+            wind_speed,
+            wind_direction,
+            humidity,
+            pressure,
+            daily,
+        })
+    }
+
+    pub fn get_detailed_snapshot(&self) -> DetailedForecastSnapshot {
+        if let Ok(guard) = self.cache.lock() {
+            let (lat, lon) = if let Some(ref g) = guard.gnome_loc {
+                (g.lat, g.lon)
+            } else {
+                (-36.8335, -73.0487)
+            };
+
+            let location_name = if !self.manual_city.is_empty() {
+                self.manual_city.clone()
+            } else if let Some(ref g) = guard.gnome_loc {
+                g.name.clone()
+            } else if let Some(ref ip) = guard.ip_city {
+                ip.clone()
+            } else {
+                DEFAULT_CITY_NAME.to_string()
+            };
+
+            let last_updated = guard.last_fetch.map(|_| {
+                let now = chrono::Local::now();
+                now.format("%H:%M:%S").to_string()
+            });
+
+            DetailedForecastSnapshot {
+                location_name,
+                lat,
+                lon,
+                last_updated,
+                primary: guard.primary_data.clone(),
+                santiago: guard.santiago_data.clone(),
+                is_fetching: guard.is_fetching,
+            }
+        } else {
+            DetailedForecastSnapshot {
+                location_name: DEFAULT_CITY_NAME.to_string(),
+                lat: -36.8335,
+                lon: -73.0487,
+                last_updated: None,
+                primary: None,
+                santiago: None,
+                is_fetching: false,
+            }
+        }
     }
 
     pub fn get_primary_condition(&self) -> WeatherCondition {

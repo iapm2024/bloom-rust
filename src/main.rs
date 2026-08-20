@@ -82,12 +82,13 @@ fn main() -> Result<()> {
     let mut weather_fx = WeatherFxEngine::new(size.width, size.height);
 
     let mut show_about = false;
+    let mut show_weather = false;
     let target_frame_duration = Duration::from_millis(33); // ~30 FPS
     let mut last_frame = std::time::Instant::now();
 
     loop {
         terminal.draw(|f| {
-            render_ui(f, &config, &weather, &tree_grid, &particles, &stars, &weather_fx, show_about);
+            render_ui(f, &config, &weather, &tree_grid, &particles, &stars, &weather_fx, show_about, show_weather);
         })?;
 
         let elapsed = last_frame.elapsed();
@@ -98,11 +99,31 @@ fn main() -> Result<()> {
                 Event::Key(key) => {
                     if key.kind == KeyEventKind::Press {
                         match key.code {
-                            KeyCode::Char('q') | KeyCode::Char('Q') | KeyCode::Esc => {
+                            KeyCode::Char('q') | KeyCode::Char('Q') => {
                                 break;
+                            }
+                            KeyCode::Esc => {
+                                if show_about || show_weather {
+                                    show_about = false;
+                                    show_weather = false;
+                                } else {
+                                    break;
+                                }
                             }
                             KeyCode::Char('a') | KeyCode::Char('A') | KeyCode::Char('?') => {
                                 show_about = !show_about;
+                                if show_about {
+                                    show_weather = false;
+                                }
+                            }
+                            KeyCode::Char('o') | KeyCode::Char('O') | KeyCode::Char('F') => {
+                                show_weather = !show_weather;
+                                if show_weather {
+                                    show_about = false;
+                                }
+                            }
+                            KeyCode::Char('r') | KeyCode::Char('R') => {
+                                weather.trigger_fetch_background();
                             }
                             KeyCode::Char('1') => {
                                 config.season = config::Season::Spring;
@@ -120,7 +141,7 @@ fn main() -> Result<()> {
                                 config.mood = match config.mood {
                                     config::Mood::Day => config::Mood::Night,
                                     config::Mood::Night => config::Mood::Day,
-                                };
+                                    };
                             }
                             KeyCode::Char('g') | KeyCode::Char('G') => {
                                 particles.trigger_gust();
@@ -131,7 +152,7 @@ fn main() -> Result<()> {
                             KeyCode::Char('-') | KeyCode::Char('_') | KeyCode::Char('[') => {
                                 particles.adjust_density(-20, &tree_grid);
                             }
-                            KeyCode::Char('f') | KeyCode::Char('F') => {
+                            KeyCode::Char('f') => {
                                 particles.adjust_speed(0.2);
                                 config.speed = particles.speed;
                             }

@@ -9,7 +9,7 @@ use ratatui::{
 use crate::config::{AppConfig, Hemisphere, Mood, Season};
 use crate::physics::{Leaf, LeafState, ParallaxLayer, ParticleEngine};
 use crate::stars::StarrySky;
-use crate::weather::{WeatherCondition, WeatherFetcher, WeatherFxEngine, WeatherFxKind};
+use crate::weather::{weathercode_description, wind_dir_to_cardinal, WeatherCondition, WeatherFetcher, WeatherFxEngine, WeatherFxKind};
 use chrono::{Datelike, Local};
 
 use std::cell::RefCell;
@@ -106,6 +106,7 @@ pub fn render_ui(
     stars: &StarrySky,
     weather_fx: &WeatherFxEngine,
     show_about: bool,
+    show_weather: bool,
 ) {
     let area = f.size();
     if area.width < 10 || area.height < 5 {
@@ -400,8 +401,10 @@ pub fn render_ui(
     };
     f.render_widget(footer_p, footer_rect);
 
-    // 12. Render About Modal Overlay if toggled
-    if show_about {
+    // 12. Render Modal Overlays if toggled
+    if show_weather {
+        render_weather_modal(f, area, weather, config);
+    } else if show_about {
         render_about_modal(f, area, config);
     }
 }
@@ -770,6 +773,8 @@ fn render_about_modal(f: &mut Frame, area: Rect, _config: &AppConfig) {
     let shortcuts = [
         ("1, 2, 3, 4", "Spring / Summer / Autumn / Winter"),
         ("m", "Toggle Day / Night Mood"),
+        ("o, F", "Weather Forecast Pop-up"),
+        ("r", "Refresh Live Weather Data"),
         ("g", "Trigger Wind Gust Surge"),
         ("+ / -", "Adjust Blossom Density"),
         ("f / s", "Faster / Slower Fall Speed"),
@@ -806,7 +811,7 @@ fn render_about_modal(f: &mut Frame, area: Rect, _config: &AppConfig) {
         ]));
     }
 
-    let modal_width = 56.min(area.width.saturating_sub(4));
+    let modal_width = 58.min(area.width.saturating_sub(4));
     let modal_height = (lines.len() as u16 + 2).min(area.height.saturating_sub(2));
     let rect = centered_rect(modal_width, modal_height, area);
 
@@ -819,6 +824,163 @@ fn render_about_modal(f: &mut Frame, area: Rect, _config: &AppConfig) {
 
     let paragraph = Paragraph::new(lines).block(block);
 
+    f.render_widget(paragraph, rect);
+}
+
+fn render_weather_modal(f: &mut Frame, area: Rect, weather: &WeatherFetcher, _config: &AppConfig) {
+    let snapshot = weather.get_detailed_snapshot();
+    let mut lines = Vec::new();
+
+    // 1. Header Title
+    lines.push(
+        Line::from(vec![
+            Span::styled(
+                "METEOROLOGICAL OUTLOOK & WEATHER FORECAST",
+                Style::default().fg(Color::Rgb(136, 192, 208)).add_modifier(Modifier::BOLD),
+            ),
+        ])
+        .alignment(Alignment::Center),
+    );
+
+    // 2. Station metadata
+    let updated_str = snapshot.last_updated.as_deref().unwrap_or("Updating...");
+    let lat_str = if snapshot.lat < 0.0 {
+        format!("{:.2}°S", snapshot.lat.abs())
+    } else {
+        format!("{:.2}°N", snapshot.lat)
+    };
+    let lon_str = if snapshot.lon < 0.0 {
+        format!("{:.2}°W", snapshot.lon.abs())
+    } else {
+        format!("{:.2}°E", snapshot.lon)
+    };
+
+    lines.push(
+        Line::from(vec![
+            Span::styled("Station: ", Style::default().fg(Color::Rgb(129, 161, 193)).add_modifier(Modifier::BOLD)),
+            Span::styled(format!("{} ({}, {})", snapshot.location_name, lat_str, lon_str), Style::default().fg(Color::Rgb(229, 233, 240))),
+            Span::styled("  │  Updated: ", Style::default().fg(Color::Rgb(94, 129, 172))),
+            Span::styled(updated_str, Style::default().fg(Color::Rgb(143, 188, 187))),
+        ])
+        .alignment(Alignment::Center),
+    );
+
+    lines.push(Line::from(""));
+
+    // 3. Current Live Telemetry Block
+    if let Some(ref cur) = snapshot.primary {
+        let (badge, desc) = weathercode_description(cur.weathercode);
+        let wind_cardinal = wind_dir_to_cardinal(cur.wind_direction);
+        let hum_str = cur.humidity.map(|h| format!("{:.0}%", h)).unwrap_or_else(|| "N/A".to_string());
+        let press_str = cur.pressure.map(|p| format!("{:.0} hPa", p)).unwrap_or_else(|| "N/A".to_string());
+
+        lines.push(
+            Line::from(vec![
+                Span::styled("  Current Temp: ", Style::default().fg(Color::Rgb(129, 161, 193)).add_modifier(Modifier::BOLD)),
+                Span::styled(format!("{:.1}°C", cur.temp), Style::default().fg(Color::Rgb(235, 203, 139)).add_modifier(Modifier::BOLD)),
+                Span::styled("   │  Condition: ", Style::default().fg(Color::Rgb(94, 129, 172))),
+                Span::styled(format!("{} {}", badge, desc), Style::default().fg(Color::Rgb(143, 188, 187)).add_modifier(Modifier::BOLD)),
+            ])
+        );
+
+        lines.push(
+            Line::from(vec![
+                Span::styled("  Wind Speed:   ", Style::default().fg(Color::Rgb(129, 161, 193)).add_modifier(Modifier::BOLD)),
+                Span::styled(format!("{:.1} km/h ({})", cur.wind_speed, wind_cardinal), Style::default().fg(Color::Rgb(229, 233, 240))),
+                Span::styled("   │  Humidity: ", Style::default().fg(Color::Rgb(94, 129, 172))),
+                Span::styled(hum_str, Style::default().fg(Color::Rgb(229, 233, 240))),
+                Span::styled("  │  Pressure: ", Style::default().fg(Color::Rgb(94, 129, 172))),
+                Span::styled(press_str, Style::default().fg(Color::Rgb(229, 233, 240))),
+            ])
+        );
+
+        lines.push(Line::from(""));
+
+        // 4. Multi-Day Outlook Table
+        if !cur.daily.is_empty() {
+            lines.push(
+                Line::from(vec![
+                    Span::styled("  ── 5-Day Outlook ──────────────────────────────────────────────────────────", Style::default().fg(Color::Rgb(94, 129, 172))),
+                ])
+            );
+            lines.push(
+                Line::from(vec![
+                    Span::styled("    Day            Temp Range          Condition            Precip   Wind", Style::default().fg(Color::Rgb(129, 161, 193)).add_modifier(Modifier::BOLD)),
+                ])
+            );
+
+            for d in &cur.daily {
+                let (d_badge, d_desc) = weathercode_description(d.weathercode);
+                let cond_str = format!("{} {}", d_badge, d_desc);
+                let cond_trunc = if cond_str.len() > 20 { &cond_str[..20] } else { &cond_str };
+                let temp_range = format!("{:>4.1}° - {:>4.1}°C", d.temp_min, d.temp_max);
+
+                lines.push(
+                    Line::from(vec![
+                        Span::styled(format!("    {:<12}", d.day_name), Style::default().fg(Color::Rgb(229, 233, 240)).add_modifier(Modifier::BOLD)),
+                        Span::styled(format!("   {:<18}", temp_range), Style::default().fg(Color::Rgb(235, 203, 139))),
+                        Span::styled(format!("   {:<20}", cond_trunc), Style::default().fg(Color::Rgb(143, 188, 187))),
+                        Span::styled(format!(" {:>3}%", d.precip_prob), Style::default().fg(Color::Rgb(136, 192, 208))),
+                        Span::styled(format!("  {:>4.1} km/h", d.wind_speed), Style::default().fg(Color::Rgb(216, 222, 233))),
+                    ])
+                );
+            }
+            lines.push(Line::from(""));
+        }
+    } else {
+        lines.push(
+            Line::from(vec![
+                Span::styled("  Telemetry data is currently synchronizing with Open-Meteo...", Style::default().fg(Color::Rgb(143, 188, 187))),
+            ])
+            .alignment(Alignment::Center),
+        );
+        lines.push(Line::from(""));
+    }
+
+    // 5. Comparative Station Block (Santiago)
+    if let Some(ref stgo) = snapshot.santiago {
+        let (stgo_badge, stgo_desc) = weathercode_description(stgo.weathercode);
+        lines.push(
+            Line::from(vec![
+                Span::styled("  ── Regional Comparative Station ───────────────────────────────────────────", Style::default().fg(Color::Rgb(94, 129, 172))),
+            ])
+        );
+        lines.push(
+            Line::from(vec![
+                Span::styled("  Santiago Capital:    ", Style::default().fg(Color::Rgb(129, 161, 193)).add_modifier(Modifier::BOLD)),
+                Span::styled(format!("{:.1}°C", stgo.temp), Style::default().fg(Color::Rgb(235, 203, 139)).add_modifier(Modifier::BOLD)),
+                Span::styled("   │  Condition: ", Style::default().fg(Color::Rgb(94, 129, 172))),
+                Span::styled(format!("{} {}", stgo_badge, stgo_desc), Style::default().fg(Color::Rgb(143, 188, 187))),
+                Span::styled(format!("  │  Wind: {:.1} km/h", stgo.wind_speed), Style::default().fg(Color::Rgb(216, 222, 233))),
+            ])
+        );
+        lines.push(Line::from(""));
+    }
+
+    // 6. Navigation Footer
+    lines.push(
+        Line::from(vec![
+            Span::styled("[ o / F / Esc ] ", Style::default().fg(Color::Rgb(136, 192, 208)).add_modifier(Modifier::BOLD)),
+            Span::styled("Close Forecast Overlay", Style::default().fg(Color::Rgb(229, 233, 240))),
+            Span::styled("   │   ", Style::default().fg(Color::Rgb(94, 129, 172))),
+            Span::styled("[ r ] ", Style::default().fg(Color::Rgb(136, 192, 208)).add_modifier(Modifier::BOLD)),
+            Span::styled("Force Background Refresh", Style::default().fg(Color::Rgb(229, 233, 240))),
+        ])
+        .alignment(Alignment::Center),
+    );
+
+    let modal_width = 80.min(area.width.saturating_sub(4));
+    let modal_height = (lines.len() as u16 + 2).min(area.height.saturating_sub(2));
+    let rect = centered_rect(modal_width, modal_height, area);
+
+    f.render_widget(Clear, rect);
+
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Rgb(136, 192, 208)).add_modifier(Modifier::BOLD))
+        .style(Style::default().bg(Color::Rgb(46, 52, 64)));
+
+    let paragraph = Paragraph::new(lines).block(block);
     f.render_widget(paragraph, rect);
 }
 
