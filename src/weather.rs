@@ -410,7 +410,7 @@ impl WeatherFetcher {
 
             cached
         } else {
-            "Concepción · N/A  │  Santiago · N/A".to_string()
+            "Concepción · N/A".to_string()
         }
     }
 
