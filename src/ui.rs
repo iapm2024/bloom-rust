@@ -121,7 +121,7 @@ pub fn render_ui(
     let target_height = area.height.saturating_sub(1) as usize;
 
     if art_height <= target_height {
-        // 1:1 scale rendering (fits completely!)
+        // 1:1 scale rendering with harmonic canopy sway & branch flutter
         let offset_x = (area.width as usize).saturating_sub(art_width) / 2;
         let offset_y = target_height - art_height;
 
@@ -132,17 +132,31 @@ pub fn render_ui(
             }
 
             for (c, &ch) in row.iter().enumerate() {
-                let px = (offset_x + c) as u16;
-                if px >= area.width || ch == ' ' {
+                if ch == ' ' {
                     continue;
                 }
 
-                let color = get_tree_char_color(ch, r, c, art_height, art_width, season, config.mood);
-                set_cell(buf, px, py, ch, color, nord_bg);
+                let sway_dx = compute_tree_sway(
+                    r,
+                    c,
+                    art_height,
+                    art_width,
+                    particles.time,
+                    particles.sway,
+                    particles.gust_intensity,
+                    particles.gust_direction,
+                );
+
+                let px_i32 = offset_x as i32 + c as i32 + sway_dx;
+                if px_i32 >= 0 && px_i32 < area.width as i32 {
+                    let px = px_i32 as u16;
+                    let color = get_tree_char_color(ch, r, c, art_height, art_width, season, config.mood);
+                    set_cell(buf, px, py, ch, color, nord_bg);
+                }
             }
         }
     } else {
-        // Proportional Scaling to fit both top canopy and grounded root base inside small terminal height
+        // Proportional Scaling to fit inside small terminal height with organic sway
         let step_y = if target_height > 1 {
             (art_height - 1) as f32 / (target_height - 1) as f32
         } else {
@@ -164,10 +178,22 @@ pub fn render_ui(
                     let sx = ((bx as f32 * step_x).round() as usize).min(row_len.saturating_sub(1));
                     let ch = row[sx];
                     if ch != ' ' {
-                        let px = offset_x + bx as u16;
+                        let sway_dx = compute_tree_sway(
+                            sy,
+                            sx,
+                            art_height,
+                            art_width,
+                            particles.time,
+                            particles.sway,
+                            particles.gust_intensity,
+                            particles.gust_direction,
+                        );
+
+                        let px_i32 = offset_x as i32 + bx as i32 + sway_dx;
                         let py = by as u16;
 
-                        if px < area.width && py < area.height.saturating_sub(1) {
+                        if px_i32 >= 0 && px_i32 < area.width as i32 && py < area.height.saturating_sub(1) {
+                            let px = px_i32 as u16;
                             let color = get_tree_char_color(ch, sy, sx, art_height, art_width, season, config.mood);
                             set_cell(buf, px, py, ch, color, nord_bg);
                         }
@@ -709,4 +735,39 @@ fn render_about_modal(f: &mut Frame, area: Rect, _config: &AppConfig) {
     let paragraph = Paragraph::new(lines).block(block);
 
     f.render_widget(paragraph, rect);
+}
+
+fn compute_tree_sway(
+    r: usize,
+    c: usize,
+    art_height: usize,
+    art_width: usize,
+    time: f32,
+    sway: f32,
+    gust_intensity: f32,
+    gust_direction: f32,
+) -> i32 {
+    let trunk_threshold = (art_height * 65) / 100;
+    if r >= trunk_threshold {
+        return 0;
+    }
+
+    // Height factor: 0.0 at trunk threshold, 1.0 at top canopy
+    let h_frac = (1.0 - (r as f32 / trunk_threshold as f32)).clamp(0.0, 1.0);
+
+    // Distance from center column
+    let center_c = (art_width as f32) * 0.5;
+    let dist_c = ((c as f32 - center_c).abs() / center_c.max(1.0)).clamp(0.0, 1.0);
+
+    // 1. Ambient gentle harmonic sway
+    let ambient_wave = (time * 1.6 + (r as f32 * 0.12)).sin() * (0.6 * sway) * (h_frac * h_frac);
+
+    // 2. Gust bending
+    let gust_bend = gust_intensity * gust_direction * 1.5 * h_frac.powf(1.4);
+
+    // 3. Outer branch tips flutter
+    let tip_flutter = (time * 3.0 + (r * 5 + c) as f32 * 0.25).sin() * (0.45 * sway * dist_c * h_frac);
+
+    let total_displacement = (ambient_wave + gust_bend + tip_flutter).round() as i32;
+    total_displacement.clamp(-2, 2)
 }

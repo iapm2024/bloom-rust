@@ -375,16 +375,65 @@ impl ParticleEngine {
                     }
                 }
                 LeafState::Falling => {
-                    // Spatial wind wave propagation across screen width
+                    // 1. Spatial wind wave propagation across screen width
                     let spatial_wave = ((self.time * 2.2) - (p.x * 0.035)).sin() * (0.35 + self.gust_intensity * 0.45) * layer_mult;
                     let micro_turbulence = ((self.time * 3.8) + p.phase).cos() * 0.18 * (1.0 + self.gust_intensity) * layer_mult;
 
                     let total_wind_x = (self.current_wind * layer_mult) + spatial_wave + micro_turbulence;
                     p.x += p.vx + total_wind_x;
 
-                    // Aerodynamic petal lift during strong wind gusts
+                    // 2. Aerodynamic Canopy Leeward Swirl Vortex
+                    let canopy_cx = width as f32 * 0.5;
+                    let canopy_cy = (height as f32 * 0.38).min(18.0);
+                    let vortex_offset_x = (self.current_wind * 9.0).clamp(-14.0, 14.0);
+                    let vortex_cx = canopy_cx + vortex_offset_x;
+                    let vortex_cy = canopy_cy + ((self.time * 1.8).sin() * 1.5);
+                    let vortex_radius = 12.0f32;
+
+                    let v_dx = p.x - vortex_cx;
+                    let v_dy = p.y - vortex_cy;
+                    let v_dist_sq = v_dx * v_dx + v_dy * v_dy;
+
+                    if v_dist_sq < vortex_radius * vortex_radius && v_dist_sq > 0.8 && self.current_wind.abs() > 0.15 {
+                        let v_dist = v_dist_sq.sqrt();
+                        let swirl_strength = (1.0 - (v_dist / vortex_radius)) * (self.current_wind.abs() * 0.28) * self.current_wind.signum() * layer_mult;
+                        let tang_x = (-v_dy / v_dist) * swirl_strength;
+                        let tang_y = (v_dx / v_dist) * swirl_strength;
+                        p.x += tang_x;
+                        p.y += tang_y;
+                        p.angular_velocity += swirl_strength * 0.15;
+                    }
+
+                    // 3. Aerodynamic petal lift during strong wind gusts
                     let lift = (self.gust_intensity * 0.16 * ((self.time * 2.8 + p.phase).sin() + 0.4) * layer_mult).clamp(0.0, 0.35);
                     p.y += (p.vy - lift).max(0.06);
+
+                    // 4. Branch Collision & Deflection
+                    let art_height = tree_grid.len();
+                    let art_width = tree_grid.iter().map(|r| r.len()).max().unwrap_or(80);
+                    let target_height = height.saturating_sub(1) as usize;
+
+                    if art_height <= target_height && p.y >= 0.0 && p.x >= 0.0 {
+                        let tree_offset_x = (width as usize).saturating_sub(art_width) / 2;
+                        let tree_offset_y = target_height - art_height;
+
+                        let px_u = p.x.round() as usize;
+                        let py_u = p.y.round() as usize;
+
+                        if px_u >= tree_offset_x && py_u >= tree_offset_y {
+                            let tr = py_u - tree_offset_y;
+                            let tc = px_u - tree_offset_x;
+
+                            if tr < art_height && tc < tree_grid[tr].len() {
+                                let branch_ch = tree_grid[tr][tc];
+                                if matches!(branch_ch, '#' | '%' | '@' | '=') && rng.gen_bool(0.18) {
+                                    p.vx = -p.vx * 0.7 + rng.gen_range(-0.35..0.35);
+                                    p.vy = (p.vy * 0.55).max(0.08);
+                                    p.angular_velocity += rng.gen_range(-0.35..0.35);
+                                }
+                            }
+                        }
+                    }
 
                     let target_ground_y = self.terrain.get_ground_y(p.x.round().clamp(0.0, width.saturating_sub(1) as f32) as u16);
 

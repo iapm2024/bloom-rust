@@ -3,9 +3,11 @@
 > Nord-themed Terminal Cherry Blossom Screensaver written in Rust.
 
 ## Overview
-`bloom-rust` is an ASCII cherry blossom tree animation and terminal screensaver featuring 3D dual-layer parallax depth, aerodynamic petal tumbling, organic terrain physics, dynamic altitude shading, real-time meteorological integration, and a pure Nord Polar Night aesthetic.
+`bloom-rust` is an ASCII cherry blossom tree animation and terminal screensaver featuring organic canopy sway, leeward aerodynamic swirl vortices, 3D dual-layer parallax depth, rotational petal tumbling, organic terrain physics, dynamic altitude shading, real-time meteorological integration, and a pure Nord Polar Night aesthetic.
 
 ## Features
+- **Organic Canopy Sway & Branch Flutter**: The tree structure bends and flexes harmonically with ambient breezes and gusts, with outer blossom tips fluttering while the trunk remains firmly grounded.
+- **Leeward Swirl Vortices & Branch Bouncing**: Canopy drafting creates localized aerodynamic vortices that curve falling petals in spiral arcs, while inner branch collisions deflect descending petals.
 - **Dual-Layer Parallax Simulation**: Foreground and background petal planes drift independently around the canopy for authentic 3D spatial depth.
 - **Aerodynamic Rotational Tumbling**: Petals rotate dynamically with angular momentum, transitioning between broadside and edge-on silhouettes as they drift.
 - **Contoured Organic Ground & Petal Mounds**: Undulating terrain baseline with grass tufts, accumulating petal drifts, and gust-induced ground rustle.
