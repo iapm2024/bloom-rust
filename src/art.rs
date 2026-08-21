@@ -93,3 +93,24 @@ pub fn parse_art(art_data: &str) -> Vec<Vec<char>> {
         .map(|line| line.chars().collect())
         .collect()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_default_art() {
+        let grid = parse_art(DEFAULT_ART_DATA);
+        assert!(!grid.is_empty());
+        assert!(grid.len() > 10);
+        assert!(!grid[0].is_empty());
+    }
+
+    #[test]
+    fn test_parse_custom_art() {
+        let sample = "\n\n  *#*\n  ###\n\n";
+        let grid = parse_art(sample);
+        assert_eq!(grid.len(), 2);
+        assert_eq!(grid[0], vec![' ', ' ', '*', '#', '*']);
+    }
+}

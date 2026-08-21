@@ -810,7 +810,7 @@ fn render_about_modal(f: &mut Frame, area: Rect, _config: &AppConfig) {
 
     let mut lines = vec![
         Line::from(vec![
-            Span::styled("BLOOM-RUST v0.4.0", Style::default().fg(Color::Rgb(94, 129, 172)).add_modifier(Modifier::BOLD)),
+            Span::styled(format!("BLOOM-RUST v{}", env!("CARGO_PKG_VERSION")), Style::default().fg(Color::Rgb(94, 129, 172)).add_modifier(Modifier::BOLD)),
         ]).alignment(Alignment::Center),
         Line::from(vec![
             Span::styled("Author: ", Style::default().fg(Color::Rgb(129, 161, 193)).add_modifier(Modifier::BOLD)),

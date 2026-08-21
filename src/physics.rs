@@ -141,7 +141,7 @@ impl TerrainProfile {
             heights.push(gy);
 
             // Pseudo-random deterministic placement of grass tufts
-            let pseudo_hash = ((x as u32 * 2654435761) ^ (x as u32 >> 3)) % 100;
+            let pseudo_hash = ((x as u32).wrapping_mul(2654435761) ^ (x as u32 >> 3)) % 100;
             if pseudo_hash < 14 && x > 2 && x < width.saturating_sub(3) {
                 let p_idx = (pseudo_hash as usize) % tuft_patterns.len();
                 grass.push(GrassTuft {
@@ -571,5 +571,27 @@ impl ParticleEngine {
         while self.leaves.len() < self.target_count {
             self.leaves.push(Self::create_particle(width, height, speed, tree_grid, &mut rng));
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_terrain_profile_dimensions() {
+        let terrain = TerrainProfile::new(80, 24);
+        assert_eq!(terrain.ground_heights.len(), 80);
+        assert_eq!(terrain.mound_levels.len(), 80);
+        let ground_y = terrain.get_ground_y(40);
+        assert!(ground_y <= 24);
+    }
+
+    #[test]
+    fn test_terrain_mound_accumulation() {
+        let mut terrain = TerrainProfile::new(80, 24);
+        let initial_mound = terrain.mound_levels[10];
+        terrain.add_petal_to_mound(10);
+        assert!(terrain.mound_levels[10] > initial_mound);
     }
 }

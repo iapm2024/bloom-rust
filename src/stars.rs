@@ -57,3 +57,25 @@ impl StarrySky {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_starry_sky_generation_and_tick() {
+        let mut sky = StarrySky::new(80, 24);
+        assert!(!sky.stars.is_empty());
+        let initial_phase = sky.stars[0].phase;
+        sky.tick();
+        assert_ne!(sky.stars[0].phase, initial_phase);
+    }
+
+    #[test]
+    fn test_starry_sky_resize() {
+        let mut sky = StarrySky::new(80, 24);
+        let count_80_24 = sky.stars.len();
+        sky.resize(160, 48);
+        assert!(sky.stars.len() >= count_80_24);
+    }
+}

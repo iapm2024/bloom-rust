@@ -1,9 +1,11 @@
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 use std::process::Command;
+use parking_lot::Mutex;
 
 const DEFAULT_CITY_NAME: &str = "Concepción";
+const USER_AGENT: &str = concat!("bloom-rust/", env!("CARGO_PKG_VERSION"));
 
 #[derive(Debug, Clone)]
 pub struct GnomeLocation {
@@ -134,20 +136,17 @@ impl WeatherFetcher {
         let manual_city = self.manual_city.clone();
 
         {
-            if let Ok(mut guard) = cache_clone.lock() {
-                if guard.is_fetching {
-                    return;
-                }
-                guard.is_fetching = true;
-            } else {
+            let mut guard = cache_clone.lock();
+            if guard.is_fetching {
                 return;
             }
+            guard.is_fetching = true;
         }
 
         thread::spawn(move || {
             let client = reqwest::blocking::Client::builder()
                 .timeout(Duration::from_secs(4))
-                .user_agent("bloom-rust/0.4")
+                .user_agent(USER_AGENT)
                 .build()
                 .ok();
 
@@ -167,47 +166,46 @@ impl WeatherFetcher {
 
             let primary = Self::fetch_open_meteo(req_lat, req_lon, client.as_ref());
 
-            if let Ok(mut guard) = cache_clone.lock() {
-                guard.detected_lat = Some(req_lat);
-                if gnome_loc.is_some() {
-                    guard.gnome_loc = gnome_loc;
-                }
-                if detected_ip_city.is_some() {
-                    guard.ip_city = detected_ip_city;
-                }
-                if primary.is_some() {
-                    guard.primary_data = primary.clone();
-                }
-
-                let condition = match guard.primary_data.as_ref().map(|d| d.weathercode) {
-                    Some(0 | 1) => WeatherCondition::Clear,
-                    Some(2 | 3) => WeatherCondition::Cloudy,
-                    Some(45 | 48) => WeatherCondition::Fog,
-                    Some(51..=67 | 80..=82 | 95..=99) => WeatherCondition::Rain,
-                    Some(71..=77 | 85..=86) => WeatherCondition::Snow,
-                    _ => WeatherCondition::Clear,
-                };
-                guard.cached_condition = condition;
-
-                let city = if !manual_city.is_empty() {
-                    manual_city.clone()
-                } else if let Some(ref g) = guard.gnome_loc {
-                    g.name.clone()
-                } else if let Some(ref ip) = guard.ip_city {
-                    ip.clone()
-                } else {
-                    DEFAULT_CITY_NAME.to_string()
-                };
-
-                let p_str = match guard.primary_data {
-                    Some(ref d) => format!("{:.1}°C", d.temp),
-                    None => "Updating...".to_string(),
-                };
-
-                guard.cached_info = format!("{} · {}", city, p_str);
-                guard.last_fetch = Some(std::time::Instant::now());
-                guard.is_fetching = false;
+            let mut guard = cache_clone.lock();
+            guard.detected_lat = Some(req_lat);
+            if gnome_loc.is_some() {
+                guard.gnome_loc = gnome_loc;
             }
+            if detected_ip_city.is_some() {
+                guard.ip_city = detected_ip_city;
+            }
+            if primary.is_some() {
+                guard.primary_data = primary.clone();
+            }
+
+            let condition = match guard.primary_data.as_ref().map(|d| d.weathercode) {
+                Some(0 | 1) => WeatherCondition::Clear,
+                Some(2 | 3) => WeatherCondition::Cloudy,
+                Some(45 | 48) => WeatherCondition::Fog,
+                Some(51..=67 | 80..=82 | 95..=99) => WeatherCondition::Rain,
+                Some(71..=77 | 85..=86) => WeatherCondition::Snow,
+                _ => WeatherCondition::Clear,
+            };
+            guard.cached_condition = condition;
+
+            let city = if !manual_city.is_empty() {
+                manual_city.clone()
+            } else if let Some(ref g) = guard.gnome_loc {
+                g.name.clone()
+            } else if let Some(ref ip) = guard.ip_city {
+                ip.clone()
+            } else {
+                DEFAULT_CITY_NAME.to_string()
+            };
+
+            let p_str = match guard.primary_data {
+                Some(ref d) => format!("{:.1}°C", d.temp),
+                None => "Updating...".to_string(),
+            };
+
+            guard.cached_info = format!("{} · {}", city, p_str);
+            guard.last_fetch = Some(std::time::Instant::now());
+            guard.is_fetching = false;
         });
     }
 
@@ -344,35 +342,27 @@ impl WeatherFetcher {
     }
 
     pub fn get_detailed_snapshot(&self) -> DetailedForecastSnapshot {
-        if let Ok(guard) = self.cache.lock() {
-            let location_name = if !self.manual_city.is_empty() {
-                self.manual_city.clone()
-            } else if let Some(ref g) = guard.gnome_loc {
-                g.name.clone()
-            } else if let Some(ref ip) = guard.ip_city {
-                ip.clone()
-            } else {
-                DEFAULT_CITY_NAME.to_string()
-            };
-
-            let last_updated = guard.last_fetch.map(|_| {
-                let now = chrono::Local::now();
-                now.format("%H:%M:%S").to_string()
-            });
-
-            DetailedForecastSnapshot {
-                location_name,
-                last_updated,
-                primary: guard.primary_data.clone(),
-                is_fetching: guard.is_fetching,
-            }
+        let guard = self.cache.lock();
+        let location_name = if !self.manual_city.is_empty() {
+            self.manual_city.clone()
+        } else if let Some(ref g) = guard.gnome_loc {
+            g.name.clone()
+        } else if let Some(ref ip) = guard.ip_city {
+            ip.clone()
         } else {
-            DetailedForecastSnapshot {
-                location_name: DEFAULT_CITY_NAME.to_string(),
-                last_updated: None,
-                primary: None,
-                is_fetching: false,
-            }
+            DEFAULT_CITY_NAME.to_string()
+        };
+
+        let last_updated = guard.last_fetch.map(|_| {
+            let now = chrono::Local::now();
+            now.format("%H:%M:%S").to_string()
+        });
+
+        DetailedForecastSnapshot {
+            location_name,
+            last_updated,
+            primary: guard.primary_data.clone(),
+            is_fetching: guard.is_fetching,
         }
     }
 
@@ -381,11 +371,8 @@ impl WeatherFetcher {
             return WeatherCondition::Clear;
         }
 
-        if let Ok(guard) = self.cache.lock() {
-            guard.cached_condition
-        } else {
-            WeatherCondition::Clear
-        }
+        let guard = self.cache.lock();
+        guard.cached_condition
     }
 
     pub fn get_weather_info(&self) -> String {
@@ -393,35 +380,32 @@ impl WeatherFetcher {
             return "Offline Mode".to_string();
         }
 
-        if let Ok(guard) = self.cache.lock() {
-            let should_refetch = if let Some(last) = guard.last_fetch {
-                last.elapsed() > Duration::from_secs(900)
-            } else {
-                !guard.is_fetching
-            };
-
-            let cached = guard.cached_info.clone();
-            drop(guard);
-
-            if should_refetch {
-                self.trigger_fetch_background();
-            }
-
-            cached
+        let guard = self.cache.lock();
+        let should_refetch = if let Some(last) = guard.last_fetch {
+            last.elapsed() > Duration::from_secs(900)
         } else {
-            "Concepción · N/A".to_string()
+            !guard.is_fetching
+        };
+
+        let cached = guard.cached_info.clone();
+        drop(guard);
+
+        if should_refetch {
+            self.trigger_fetch_background();
         }
+
+        cached
     }
 
     pub fn is_southern_hemisphere(&self) -> bool {
-        if let Ok(guard) = self.cache.lock() {
-            if let Some(lat) = guard.detected_lat {
-                return lat < 0.0;
-            }
-            if let Some(ref g) = guard.gnome_loc {
-                return g.lat < 0.0;
-            }
+        let guard = self.cache.lock();
+        if let Some(lat) = guard.detected_lat {
+            return lat < 0.0;
         }
+        if let Some(ref g) = guard.gnome_loc {
+            return g.lat < 0.0;
+        }
+        drop(guard);
 
         // Check /etc/localtime symlink
         if let Ok(link) = std::fs::read_link("/etc/localtime") {
