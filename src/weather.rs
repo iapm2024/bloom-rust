@@ -47,15 +47,13 @@ pub struct DetailedForecastSnapshot {
 pub fn weathercode_symbol(code: u8) -> &'static str {
     match code {
         0 | 1 => "☀",
-        2 => "⛅",
-        3 => "☁",
+        2 | 3 => "☁",
         45 | 48 => "≡",
         51..=57 => "⁘",
-        61..=67 => "☂",
+        61..=67 | 80..=82 => "☂",
         71..=77 => "❄",
-        80..=82 => "☔",
         85 | 86 => "❅",
-        95..=99 => "⚡",
+        95..=99 => "☇",
         _ => "☀",
     }
 }
@@ -82,6 +80,7 @@ pub fn weathercode_full_name(code: u8) -> &'static str {
 pub struct CacheState {
     pub gnome_loc: Option<GnomeLocation>,
     pub ip_city: Option<String>,
+    pub detected_lat: Option<f64>,
     pub primary_data: Option<WeatherData>,
     pub last_fetch: Option<std::time::Instant>,
     pub is_fetching: bool,
@@ -108,6 +107,7 @@ impl WeatherFetcher {
             cache: Arc::new(Mutex::new(CacheState {
                 gnome_loc: None,
                 ip_city: None,
+                detected_lat: None,
                 primary_data: None,
                 last_fetch: None,
                 is_fetching: false,
@@ -147,7 +147,7 @@ impl WeatherFetcher {
         thread::spawn(move || {
             let client = reqwest::blocking::Client::builder()
                 .timeout(Duration::from_secs(4))
-                .user_agent("bloom-rust/0.3")
+                .user_agent("bloom-rust/0.4")
                 .build()
                 .ok();
 
@@ -168,6 +168,7 @@ impl WeatherFetcher {
             let primary = Self::fetch_open_meteo(req_lat, req_lon, client.as_ref());
 
             if let Ok(mut guard) = cache_clone.lock() {
+                guard.detected_lat = Some(req_lat);
                 if gnome_loc.is_some() {
                     guard.gnome_loc = gnome_loc;
                 }
@@ -212,13 +213,11 @@ impl WeatherFetcher {
 
     fn geocode_city(city: &str, client: Option<&reqwest::blocking::Client>) -> Option<(f64, f64)> {
         let client = client?;
-        let encoded_city = city.replace(' ', "%20");
-        let url = format!(
-            "https://geocoding-api.open-meteo.com/v1/search?name={}&count=1",
-            encoded_city
-        );
-
-        let resp = client.get(&url).send().ok()?;
+        let resp = client
+            .get("https://geocoding-api.open-meteo.com/v1/search")
+            .query(&[("name", city), ("count", "1")])
+            .send()
+            .ok()?;
         let json: serde_json::Value = resp.json().ok()?;
         let lat = json["results"][0]["latitude"].as_f64()?;
         let lon = json["results"][0]["longitude"].as_f64()?;
@@ -416,6 +415,9 @@ impl WeatherFetcher {
 
     pub fn is_southern_hemisphere(&self) -> bool {
         if let Ok(guard) = self.cache.lock() {
+            if let Some(lat) = guard.detected_lat {
+                return lat < 0.0;
+            }
             if let Some(ref g) = guard.gnome_loc {
                 return g.lat < 0.0;
             }

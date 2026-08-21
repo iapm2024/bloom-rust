@@ -51,7 +51,12 @@ fi
 check_deps() {
     if ! command -v cargo &> /dev/null; then
         echo "Error: Cargo is required but not installed."
-        echo "Please install Rust & Cargo (e.g. curl https://sh.rustup.rs -sSf | sh)."
+        echo "Please install Rust & Cargo:"
+        echo "  Via rustup (recommended): curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh"
+        echo "  Debian/Ubuntu: sudo apt install cargo"
+        echo "  Fedora:        sudo dnf install cargo"
+        echo "  Arch Linux:    sudo pacman -S rust"
+        echo "  openSUSE:      sudo zypper install cargo"
         exit 1
     fi
 }
@@ -80,8 +85,9 @@ fi
 echo "Cleaning build target cache to conserve disk space..."
 (cd "$SCRIPT_DIR" && cargo clean)
 
+VERSION=$(grep -m1 '^version = ' "$SCRIPT_DIR/Cargo.toml" | cut -d '"' -f2)
 echo "======================================================="
-echo " Installation successful! bloom-rust v0.3.0 is ready."
+echo " Installation successful! bloom-rust v${VERSION} is ready."
 if [[ ":$PATH:" != *":$BIN_DIR:"* ]]; then
     echo " Note: $BIN_DIR is not in your PATH. You may add it via:"
     echo "   export PATH=\"\$PATH:$BIN_DIR\""

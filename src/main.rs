@@ -49,7 +49,7 @@ fn main() -> Result<()> {
             return Ok(());
         }
         ConfigActionResult::About => {
-            println!("bloom-rust v0.3.0 by iapizarro");
+            println!("bloom-rust v0.4.0 by iapizarro");
             println!("Nord-themed Terminal Cherry Blossom Screensaver written in Rust.");
             return Ok(());
         }
@@ -86,7 +86,7 @@ fn main() -> Result<()> {
     let target_frame_duration = Duration::from_millis(33); // ~30 FPS
     let mut last_frame = std::time::Instant::now();
 
-    loop {
+    'main_loop: loop {
         terminal.draw(|f| {
             render_ui(f, &config, &weather, &tree_grid, &particles, &stars, &weather_fx, show_about, show_weather);
         })?;
@@ -95,67 +95,88 @@ fn main() -> Result<()> {
         let poll_timeout = target_frame_duration.saturating_sub(elapsed);
 
         if event::poll(poll_timeout)? {
-            match event::read()? {
-                Event::Key(key) => {
-                    if key.kind == KeyEventKind::Press {
-                        match key.code {
-                            KeyCode::Char('q') | KeyCode::Char('Q') => {
-                                break;
-                            }
-                            KeyCode::Esc => {
-                                if show_about || show_weather {
-                                    show_about = false;
-                                    show_weather = false;
-                                } else {
-                                    break;
+            while let Ok(evt) = event::read() {
+                match evt {
+                    Event::Key(key) => {
+                        if key.kind == KeyEventKind::Press {
+                            match key.code {
+                                KeyCode::Char('q') | KeyCode::Char('Q') => {
+                                    break 'main_loop;
                                 }
-                            }
-                            KeyCode::Char('a') | KeyCode::Char('A') | KeyCode::Char('?') => {
-                                show_about = !show_about;
-                                if show_about {
-                                    show_weather = false;
+                                KeyCode::Esc => {
+                                    if show_about || show_weather {
+                                        show_about = false;
+                                        show_weather = false;
+                                    } else {
+                                        break 'main_loop;
+                                    }
                                 }
-                            }
-                            KeyCode::Char('o') | KeyCode::Char('O') | KeyCode::Char('f') | KeyCode::Char('F') => {
-                                show_weather = !show_weather;
-                                if show_weather {
-                                    show_about = false;
+                                KeyCode::Char('a') | KeyCode::Char('A') | KeyCode::Char('?') => {
+                                    show_about = !show_about;
+                                    if show_about {
+                                        show_weather = false;
+                                    }
                                 }
+                                KeyCode::Char('f') | KeyCode::Char('F') => {
+                                    show_weather = !show_weather;
+                                    if show_weather {
+                                        show_about = false;
+                                    }
+                                }
+                                KeyCode::Char('r') | KeyCode::Char('R') => {
+                                    weather.trigger_fetch_background();
+                                    particles.set_feedback("Refreshing Weather Telemetry...");
+                                }
+                                KeyCode::Char('1') => {
+                                    config.season = config::Season::Spring;
+                                    particles.set_feedback("Season: Spring");
+                                }
+                                KeyCode::Char('2') => {
+                                    config.season = config::Season::Summer;
+                                    particles.set_feedback("Season: Summer");
+                                }
+                                KeyCode::Char('3') => {
+                                    config.season = config::Season::Autumn;
+                                    particles.set_feedback("Season: Autumn");
+                                }
+                                KeyCode::Char('4') => {
+                                    config.season = config::Season::Winter;
+                                    particles.set_feedback("Season: Winter");
+                                }
+                                KeyCode::Char('0') | KeyCode::Char('`') => {
+                                    config.season = config::Season::Auto;
+                                    particles.set_feedback("Season: Auto (Astronomical)");
+                                }
+                                KeyCode::Char('m') | KeyCode::Char('M') => {
+                                    config.mood = match config.mood {
+                                        config::Mood::Day => {
+                                            particles.set_feedback("Theme Mood: Night");
+                                            config::Mood::Night
+                                        }
+                                        config::Mood::Night => {
+                                            particles.set_feedback("Theme Mood: Day");
+                                            config::Mood::Day
+                                        }
+                                    };
+                                }
+                                KeyCode::Char('g') | KeyCode::Char('G') => {
+                                    particles.trigger_gust();
+                                }
+                                _ => {}
                             }
-                            KeyCode::Char('r') | KeyCode::Char('R') => {
-                                weather.trigger_fetch_background();
-                            }
-                            KeyCode::Char('1') => {
-                                config.season = config::Season::Spring;
-                            }
-                            KeyCode::Char('2') => {
-                                config.season = config::Season::Summer;
-                            }
-                            KeyCode::Char('3') => {
-                                config.season = config::Season::Autumn;
-                            }
-                            KeyCode::Char('4') => {
-                                config.season = config::Season::Winter;
-                            }
-                            KeyCode::Char('m') | KeyCode::Char('M') => {
-                                config.mood = match config.mood {
-                                    config::Mood::Day => config::Mood::Night,
-                                    config::Mood::Night => config::Mood::Day,
-                                };
-                            }
-                            KeyCode::Char('g') | KeyCode::Char('G') => {
-                                particles.trigger_gust();
-                            }
-                            _ => {}
                         }
                     }
+                    Event::Resize(w, h) => {
+                        particles.resize(w, h);
+                        stars.resize(w, h);
+                        weather_fx.resize(w, h);
+                    }
+                    _ => {}
                 }
-                Event::Resize(w, h) => {
-                    particles.resize(w, h);
-                    stars.resize(w, h);
-                    weather_fx.resize(w, h);
+
+                if !event::poll(Duration::from_millis(0))? {
+                    break;
                 }
-                _ => {}
             }
         }
 

@@ -182,8 +182,8 @@ pub fn render_ui(
     }
 
     // 5. Render Static Tree Matrix with Cached Colors & High-Performance Row-Level Sway
-    let art_height = tree_grid.len();
-    let art_width = tree_grid.iter().map(|r| r.len()).max().unwrap_or(80);
+    let art_height = particles.art_height;
+    let art_width = particles.art_width;
     let target_height = area.height.saturating_sub(1) as usize;
 
     TREE_COLOR_CACHE.with(|cache_cell| {
@@ -398,21 +398,23 @@ pub fn render_ui(
             let mut cache = cache_cell.borrow_mut();
             let now = Local::now();
             let cur_sec = now.timestamp();
-            let weather_str = weather.get_weather_info();
 
-            if cache.last_sec != cur_sec || cache.last_season != Some(season) || cache.last_weather_str != weather_str {
-                let date_str = now.format("%A %d/%m/%Y");
-                let season_str = match season {
-                    Season::Spring => "Spring",
-                    Season::Summer => "Summer",
-                    Season::Autumn => "Autumn",
-                    Season::Winter => "Winter",
-                    Season::Auto => "Auto",
-                };
-                cache.cached_status_line = format!("{}  │  {}  │  {}", date_str, weather_str, season_str);
-                cache.last_sec = cur_sec;
-                cache.last_season = Some(season);
-                cache.last_weather_str = weather_str;
+            if cache.last_sec != cur_sec || cache.last_season != Some(season) {
+                let weather_str = weather.get_weather_info();
+                if cache.last_weather_str != weather_str || cache.last_sec != cur_sec || cache.last_season != Some(season) {
+                    let date_str = now.format("%A %d/%m/%Y");
+                    let season_str = match season {
+                        Season::Spring => "Spring",
+                        Season::Summer => "Summer",
+                        Season::Autumn => "Autumn",
+                        Season::Winter => "Winter",
+                        Season::Auto => "Auto",
+                    };
+                    cache.cached_status_line = format!("{}  │  {}  │  {}", date_str, weather_str, season_str);
+                    cache.last_sec = cur_sec;
+                    cache.last_season = Some(season);
+                    cache.last_weather_str = weather_str;
+                }
             }
 
             cache.cached_status_line.clone()
@@ -795,8 +797,9 @@ fn get_seasonal_colors(season: Season) -> &'static [Color] {
 fn render_about_modal(f: &mut Frame, area: Rect, _config: &AppConfig) {
     let shortcuts = [
         ("1, 2, 3, 4", "Spring / Summer / Autumn / Winter"),
+        ("0", "Reset Season to Auto (Astronomical)"),
         ("m", "Toggle Day / Night Mood"),
-        ("o, f", "Weather Forecast Pop-up"),
+        ("f", "Weather Forecast Pop-up"),
         ("r", "Refresh Live Weather Data"),
         ("g", "Trigger Wind Gust Surge"),
         ("a, ?", "Toggle About Overlay"),
@@ -807,7 +810,7 @@ fn render_about_modal(f: &mut Frame, area: Rect, _config: &AppConfig) {
 
     let mut lines = vec![
         Line::from(vec![
-            Span::styled("BLOOM-RUST v0.3.0", Style::default().fg(Color::Rgb(94, 129, 172)).add_modifier(Modifier::BOLD)),
+            Span::styled("BLOOM-RUST v0.4.0", Style::default().fg(Color::Rgb(94, 129, 172)).add_modifier(Modifier::BOLD)),
         ]).alignment(Alignment::Center),
         Line::from(vec![
             Span::styled("Author: ", Style::default().fg(Color::Rgb(129, 161, 193)).add_modifier(Modifier::BOLD)),
@@ -948,7 +951,7 @@ fn render_weather_modal(f: &mut Frame, area: Rect, weather: &WeatherFetcher, _co
             }
             lines.push(Line::from(time_spans));
 
-            // Line 2: Weather Glyphs / Symbols (e.g. ☀, ☁, ⛅, ☂, ❄, ⚡)
+            // Line 2: Weather Glyphs / Symbols (e.g. ☀, ☁, ☂, ❄, ❅, ☇, ≡, ⁘)
             let mut cond_spans = vec![Span::styled("  ", Style::default())];
             for h in hourly_slice {
                 let sym = weathercode_symbol(h.weathercode);
@@ -1012,7 +1015,7 @@ fn render_weather_modal(f: &mut Frame, area: Rect, weather: &WeatherFetcher, _co
     // 6. Navigation Footer
     lines.push(
         Line::from(vec![
-            Span::styled("o, f", Style::default().fg(Color::Rgb(94, 129, 172)).add_modifier(Modifier::BOLD)),
+            Span::styled("f", Style::default().fg(Color::Rgb(94, 129, 172)).add_modifier(Modifier::BOLD)),
             Span::styled("  Close Forecast", Style::default().fg(Color::Rgb(229, 233, 240))),
             Span::styled("   *   ", Style::default().fg(Color::Rgb(94, 129, 172))),
             Span::styled("r", Style::default().fg(Color::Rgb(94, 129, 172)).add_modifier(Modifier::BOLD)),

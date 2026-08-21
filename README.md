@@ -62,8 +62,9 @@ Options:
 | `2` | Switch to **Summer** (Aurora Green & Warm Amber) |
 | `3` | Switch to **Autumn** (Aurora Crimson & Gold) |
 | `4` | Switch to **Winter** (Frost Cyan & Pure Snow) |
+| `0` / `` ` `` | Reset to **Auto Season** (Real-Time Astronomical) |
 | `m` / `M` | Toggle **Day / Night** mood palette |
-| `o` / `f` | Toggle **Weather & Forecast Pop-Up Modal** |
+| `f` / `F` | Toggle **Weather & Forecast Pop-Up Modal** |
 | `r` / `R` | Force **Live Weather Telemetry Refresh** |
 | `g` / `G` | Trigger instant **Wind Gust Surge** |
 | `a` / `?` | Toggle About & Shortcuts overlay |

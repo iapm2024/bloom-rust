@@ -23,7 +23,7 @@ pub enum Hemisphere {
 }
 
 #[derive(Parser, Debug, Clone)]
-#[command(name = "bloom-rust", author = "iapizarro", version = "0.3.0", about = "Nord-themed Terminal Cherry Blossom Screensaver")]
+#[command(name = "bloom-rust", author = "iapizarro", version = "0.4.0", about = "Nord-themed Terminal Cherry Blossom Screensaver")]
 pub struct CliArgs {
     #[arg(short, long, help = "Number of falling blossoms / speed (1-10)")]
     pub speed: Option<f32>,
@@ -133,7 +133,7 @@ pub fn parse_cli_args() -> ConfigActionResult {
 }
 
 pub fn print_help() {
-    println!("bloom-rust 0.3.0 by iapizarro");
+    println!("bloom-rust 0.4.0 by iapizarro");
     println!("Nord-themed Terminal Cherry Blossom Screensaver");
     println!("\nUsage: bloom-rust [OPTIONS]\n");
     println!("Options:");
@@ -153,5 +153,5 @@ pub fn print_help() {
 }
 
 pub fn print_version() {
-    println!("bloom-rust v0.3.0");
+    println!("bloom-rust v0.4.0");
 }

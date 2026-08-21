@@ -227,10 +227,14 @@ pub struct ParticleEngine {
     pub current_wind: f32,
     pub target_count: usize,
     pub feedback_msg: Option<(String, std::time::Instant)>,
+    pub art_height: usize,
+    pub art_width: usize,
 }
 
 impl ParticleEngine {
     pub fn new(tree_grid: &[Vec<char>], width: u16, height: u16, speed: f32, sway: f32) -> Self {
+        let art_height = tree_grid.len();
+        let art_width = tree_grid.iter().map(|r| r.len()).max().unwrap_or(80);
         let mut engine = Self {
             leaves: Vec::with_capacity(384),
             settled: Vec::with_capacity(256),
@@ -249,6 +253,8 @@ impl ParticleEngine {
             current_wind: 0.0,
             target_count: 150,
             feedback_msg: None,
+            art_height,
+            art_width,
         };
         engine.spawn_initial(tree_grid);
         engine
@@ -405,6 +411,30 @@ impl ParticleEngine {
         self.wind_streaks.retain(|s| s.life < s.max_life && s.x >= 0.0 && s.x < width as f32);
 
         // 3. Update Leaf Simulation (Parallax & Aerodynamic Tumbling)
+        let canopy_cx = width as f32 * 0.5;
+        let canopy_cy = (height as f32 * 0.38).min(18.0);
+        let vortex_offset_x = (self.current_wind * 9.0).clamp(-14.0, 14.0);
+        let vortex_cx = canopy_cx + vortex_offset_x;
+        let vortex_cy = canopy_cy + ((self.time * 1.8).sin() * 1.5);
+        let vortex_radius = 12.0f32;
+        let vortex_radius_sq = vortex_radius * vortex_radius;
+
+        let art_height = self.art_height;
+        let art_width = self.art_width;
+        let target_height = height.saturating_sub(1) as usize;
+        let is_1to1 = art_height <= target_height;
+        let tree_offset_x = (width as usize).saturating_sub(art_width) / 2;
+        let tree_offset_y = target_height.saturating_sub(art_height);
+
+        let step_y = if target_height > 1 {
+            (art_height - 1) as f32 / (target_height - 1) as f32
+        } else {
+            1.0
+        };
+        let step_x = (art_width as f32 / width.max(1) as f32).max(1.0);
+        let scaled_width = (art_width as f32 / step_x).ceil() as usize;
+        let scaled_offset_x = (width as usize).saturating_sub(scaled_width) / 2;
+
         for p in &mut self.leaves {
             let layer_mult = match p.layer {
                 ParallaxLayer::Foreground => 1.2,
@@ -435,18 +465,11 @@ impl ParticleEngine {
                     p.x += p.vx + total_wind_x;
 
                     // 2. Aerodynamic Canopy Leeward Swirl Vortex
-                    let canopy_cx = width as f32 * 0.5;
-                    let canopy_cy = (height as f32 * 0.38).min(18.0);
-                    let vortex_offset_x = (self.current_wind * 9.0).clamp(-14.0, 14.0);
-                    let vortex_cx = canopy_cx + vortex_offset_x;
-                    let vortex_cy = canopy_cy + ((self.time * 1.8).sin() * 1.5);
-                    let vortex_radius = 12.0f32;
-
                     let v_dx = p.x - vortex_cx;
                     let v_dy = p.y - vortex_cy;
                     let v_dist_sq = v_dx * v_dx + v_dy * v_dy;
 
-                    if v_dist_sq < vortex_radius * vortex_radius && v_dist_sq > 0.8 && self.current_wind.abs() > 0.15 {
+                    if v_dist_sq < vortex_radius_sq && v_dist_sq > 0.8 && self.current_wind.abs() > 0.15 {
                         let v_dist = v_dist_sq.sqrt();
                         let swirl_strength = (1.0 - (v_dist / vortex_radius)) * (self.current_wind.abs() * 0.28) * self.current_wind.signum() * layer_mult;
                         let tang_x = (-v_dy / v_dist) * swirl_strength;
@@ -461,40 +484,22 @@ impl ParticleEngine {
                     p.y += (p.vy - lift).max(0.06);
 
                     // 4. Branch Collision & Deflection (Full & Scaled Terminals)
-                    let art_height = tree_grid.len();
-                    let art_width = tree_grid.iter().map(|r| r.len()).max().unwrap_or(80);
-                    let target_height = height.saturating_sub(1) as usize;
-
                     if p.y >= 0.0 && p.x >= 0.0 && art_height > 0 && art_width > 0 {
-                        let (tree_r, tree_c) = if art_height <= target_height {
-                            let tree_offset_x = (width as usize).saturating_sub(art_width) / 2;
-                            let tree_offset_y = target_height - art_height;
-                            let px_u = p.x.round() as usize;
-                            let py_u = p.y.round() as usize;
+                        let px_u = p.x.round() as usize;
+                        let py_u = p.y.round() as usize;
+                        let (tree_r, tree_c) = if is_1to1 {
                             if px_u >= tree_offset_x && py_u >= tree_offset_y {
                                 (Some(py_u - tree_offset_y), Some(px_u - tree_offset_x))
                             } else {
                                 (None, None)
                             }
+                        } else if px_u >= scaled_offset_x && py_u < target_height {
+                            let bx = px_u - scaled_offset_x;
+                            let sy = ((py_u as f32 * step_y).round() as usize).min(art_height.saturating_sub(1));
+                            let sx = (bx as f32 * step_x).round() as usize;
+                            (Some(sy), Some(sx))
                         } else {
-                            let step_y = if target_height > 1 {
-                                (art_height - 1) as f32 / (target_height - 1) as f32
-                            } else {
-                                1.0
-                            };
-                            let step_x = (art_width as f32 / width.max(1) as f32).max(1.0);
-                            let scaled_width = (art_width as f32 / step_x).ceil() as usize;
-                            let offset_x = (width as usize).saturating_sub(scaled_width) / 2;
-                            let px_u = p.x.round() as usize;
-                            let py_u = p.y.round() as usize;
-                            if px_u >= offset_x && py_u < target_height {
-                                let bx = px_u - offset_x;
-                                let sy = ((py_u as f32 * step_y).round() as usize).min(art_height.saturating_sub(1));
-                                let sx = (bx as f32 * step_x).round() as usize;
-                                (Some(sy), Some(sx))
-                            } else {
-                                (None, None)
-                            }
+                            (None, None)
                         };
 
                         if let (Some(tr), Some(tc)) = (tree_r, tree_c) {
