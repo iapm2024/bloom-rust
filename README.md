@@ -5,6 +5,9 @@
 ## Overview
 `bloom-rust` is an ASCII cherry blossom tree animation and terminal screensaver featuring organic canopy sway, leeward aerodynamic swirl vortices, 3D dual-layer parallax depth, rotational petal tumbling, organic terrain physics, dynamic altitude shading, real-time meteorological integration, and a pure Nord Polar Night aesthetic.
 
+> **Inspiration**: This project was inspired by [nsakura](https://github.com/KornelHajto/nsakura) by Kornel Hajto.
+
+
 - **Ambient Wildlife & Perching Birds**: Japanese White-Eye birds (`>•>`, `^v^`) that fly in, perch on branches with harmonic canopy sway, chirp, and take flight when startled by wind gusts (`g`).
 - **Summer Night Fireflies (Hotaru)**: Luminescent fireflies (`✦`, `*`, `·`) drifting through the summer night air with soft breathing glow transitions between Nord Frost and Aurora Gold.
 - **Floating Blossom Petals on Rain Puddles**: Petals landing on puddle water float and bob along ripple waves rather than settling into ground mounds.
@@ -77,7 +80,11 @@ Found a bug, have a visual physics suggestion, or want to contribute?
 - Open an issue on GitHub: [Issues Tracker](https://github.com/iapm2024/bloom-rust/issues)
 - Pull requests and feedback are welcome!
 
+## Acknowledgements
+- [nsakura](https://github.com/KornelHajto/nsakura) by Kornel Hajto — for the original inspiration of an ASCII sakura blossom terminal animation.
+
 ## License
 Licensed under [GNU General Public License v3](LICENSE).  
 Author: iapizarro (iapm2024).
+
 
