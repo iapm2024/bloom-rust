@@ -36,6 +36,11 @@
 | :---: | :---: |
 | ![Shortcuts](assets/screenshots/05_shortcuts.png) | ![Day Mood](assets/screenshots/06_day_mood.png) |
 
+| Weather Forecast Pop-up Modal |
+| :---: |
+| ![Weather Forecast](assets/screenshots/07_weather_modal.png) |
+
+
 
 ## Prerequisites
 - **Rust & Cargo**: Install via [rustup](https://rustup.rs/):
