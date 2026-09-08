@@ -22,6 +22,21 @@
 - **Expanded 29-Color Nord Gradient Palette**: Multi-tier TrueColor gradients across Aurora, Amber Gold, Frost Teal/Cyan, Blossom Rose/Wisteria, Polar Night Slate, and Radiant Snow Storm for rich organic foliage, altitude descent shading, and dissolving petal mounds.
 - **Fully Portable**: Pure-Rust TLS (`rustls`) -- no system OpenSSL or `pkg-config` needed.
 
+## Screenshots
+
+| Spring (Cherry Blossom) | Summer (Aurora Green & Warm Amber) |
+| :---: | :---: |
+| ![Spring](assets/screenshots/01_spring.png) | ![Summer](assets/screenshots/02_summer.png) |
+
+| Autumn (Crimson & Gold) | Winter (Frost Cyan & Pure Snow) |
+| :---: | :---: |
+| ![Autumn](assets/screenshots/03_autumn.png) | ![Winter](assets/screenshots/04_winter.png) |
+
+| Shortcuts & About Modal | Day Theme Mood |
+| :---: | :---: |
+| ![Shortcuts](assets/screenshots/05_shortcuts.png) | ![Day Mood](assets/screenshots/06_day_mood.png) |
+
+
 ## Prerequisites
 - **Rust & Cargo**: Install via [rustup](https://rustup.rs/):
   ```bash
