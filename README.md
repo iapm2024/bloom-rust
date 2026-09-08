@@ -5,7 +5,9 @@
 ## Overview
 `bloom-rust` is an ASCII cherry blossom tree animation and terminal screensaver featuring organic canopy sway, leeward aerodynamic swirl vortices, 3D dual-layer parallax depth, rotational petal tumbling, organic terrain physics, dynamic altitude shading, real-time meteorological integration, and a pure Nord Polar Night aesthetic.
 
-## Features
+- **Ambient Wildlife & Perching Birds**: Japanese White-Eye birds (`>•>`, `^v^`) that fly in, perch on branches with harmonic canopy sway, chirp, and take flight when startled by wind gusts (`g`).
+- **Summer Night Fireflies (Hotaru)**: Luminescent fireflies (`✦`, `*`, `·`) drifting through the summer night air with soft breathing glow transitions between Nord Frost and Aurora Gold.
+- **Floating Blossom Petals on Rain Puddles**: Petals landing on puddle water float and bob along ripple waves rather than settling into ground mounds.
 - **Organic Canopy Sway & Branch Flutter**: The tree structure bends and flexes harmonically with ambient breezes and gusts, with outer blossom tips fluttering while the trunk remains firmly grounded.
 - **Leeward Swirl Vortices & Branch Bouncing**: Canopy drafting creates localized aerodynamic vortices that curve falling petals in spiral arcs, while inner branch collisions deflect descending petals.
 - **Dual-Layer Parallax Simulation**: Foreground and background petal planes drift independently around the canopy for authentic 3D spatial depth.
@@ -14,7 +16,7 @@
 - **Meteorological FX & Puddle Reflections**: Real-time environmental rain, cloud, snow, and fog with animated puddle reflections and water ripple dynamics.
 - **Twinkling Starfield**: 5-tier Nord Frost twinkling star glow in night mode.
 - **Seasonal Modes**: Spring blossom, Summer greens, Autumn amber, Winter frost, or Auto (auto-detects hemisphere via GNOME/system location).
-- **Nord Color Palette**: Pure Nord Polar Night, Frost, Snow Storm, and Aurora styling with smooth radial foliage glow.
+- **Expanded 29-Color Nord Gradient Palette**: Multi-tier TrueColor gradients across Aurora, Amber Gold, Frost Teal/Cyan, Blossom Rose/Wisteria, Polar Night Slate, and Radiant Snow Storm for rich organic foliage, altitude descent shading, and dissolving petal mounds.
 - **Fully Portable**: Pure-Rust TLS (`rustls`) -- no system OpenSSL or `pkg-config` needed.
 
 ## Prerequisites
@@ -68,7 +70,14 @@ Options:
 | `r` / `R` | Force **Live Weather Telemetry Refresh** |
 | `g` / `G` | Trigger instant **Wind Gust Surge** |
 | `a` / `?` | Toggle About & Shortcuts overlay |
-| `q` / `Esc` | Quit screensaver |
+| `q` | Quit screensaver |
+
+## Bug Reports & Feedback
+Found a bug, have a visual physics suggestion, or want to contribute?
+- Open an issue on GitHub: [Issues Tracker](https://github.com/iapm2024/bloom-rust/issues)
+- Pull requests and feedback are welcome!
 
 ## License
-Licensed under GNU General Public License v3. Author: iapizarro.
+Licensed under [GNU General Public License v3](LICENSE).  
+Author: iapizarro (iapm2024).
+

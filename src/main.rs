@@ -18,8 +18,8 @@ use stars::StarrySky;
 use std::fs;
 use std::io::stdout;
 use std::time::Duration;
-use ui::render_ui;
-use weather::{WeatherFetcher, WeatherFxEngine};
+use ui::{get_effective_season, render_ui};
+use weather::{WeatherCondition, WeatherFetcher, WeatherFxEngine};
 
 struct TerminalCleanup;
 
@@ -59,13 +59,9 @@ fn main() -> Result<()> {
         }
     };
 
-    let art_data = if let Some(ref path) = config.art_path {
-        fs::read_to_string(path).unwrap_or_else(|_| art::DEFAULT_ART_DATA.to_string())
-    } else {
-        art::DEFAULT_ART_DATA.to_string()
-    };
-
-    let tree_grid = art::parse_art(&art_data);
+    let custom_art = config.art_path.as_ref().and_then(|path| fs::read_to_string(path).ok());
+    let art_data = custom_art.as_deref().unwrap_or(art::DEFAULT_ART_DATA);
+    let tree_grid = art::parse_art(art_data);
 
     enable_raw_mode()?;
     let mut stdout = stdout();
@@ -104,12 +100,8 @@ fn main() -> Result<()> {
                                     break 'main_loop;
                                 }
                                 KeyCode::Esc => {
-                                    if show_about || show_weather {
-                                        show_about = false;
-                                        show_weather = false;
-                                    } else {
-                                        break 'main_loop;
-                                    }
+                                    show_about = false;
+                                    show_weather = false;
                                 }
                                 KeyCode::Char('a') | KeyCode::Char('A') | KeyCode::Char('?') => {
                                     show_about = !show_about;
@@ -187,7 +179,9 @@ fn main() -> Result<()> {
         last_frame = std::time::Instant::now();
 
         let current_condition = weather.get_primary_condition();
-        particles.tick(&tree_grid);
+        let effective_season = get_effective_season(&config, &weather);
+        let is_raining = current_condition == WeatherCondition::Rain;
+        particles.tick(&tree_grid, effective_season, config.mood, is_raining);
         stars.tick();
         weather_fx.tick(current_condition, particles.current_wind);
     }

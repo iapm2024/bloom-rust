@@ -3,6 +3,7 @@ use std::thread;
 use std::time::Duration;
 use std::process::Command;
 use parking_lot::Mutex;
+use rand::Rng;
 
 const DEFAULT_CITY_NAME: &str = "Concepción";
 const USER_AGENT: &str = concat!("bloom-rust/", env!("CARGO_PKG_VERSION"));
@@ -88,6 +89,7 @@ pub struct CacheState {
     pub is_fetching: bool,
     pub cached_condition: WeatherCondition,
     pub cached_info: String,
+    pub cached_is_southern: Option<bool>,
 }
 
 #[derive(Clone)]
@@ -115,6 +117,7 @@ impl WeatherFetcher {
                 is_fetching: false,
                 cached_condition: WeatherCondition::Clear,
                 cached_info: default_info,
+                cached_is_southern: None,
             })),
             enabled,
             manual_city,
@@ -168,6 +171,7 @@ impl WeatherFetcher {
 
             let mut guard = cache_clone.lock();
             guard.detected_lat = Some(req_lat);
+            guard.cached_is_southern = Some(req_lat < 0.0);
             if gnome_loc.is_some() {
                 guard.gnome_loc = gnome_loc;
             }
@@ -200,7 +204,7 @@ impl WeatherFetcher {
 
             let p_str = match guard.primary_data {
                 Some(ref d) => format!("{:.1}°C", d.temp),
-                None => "Updating...".to_string(),
+                None => "Offline".to_string(),
             };
 
             guard.cached_info = format!("{} · {}", city, p_str);
@@ -246,30 +250,40 @@ impl WeatherFetcher {
     fn extract_city_name(out: &str) -> Option<String> {
         let parts: Vec<&str> = out.split('\'').collect();
         if parts.len() >= 2 {
-            Some(parts[1].trim().to_string())
-        } else {
-            None
+            let name = parts[1].trim();
+            if !name.is_empty() {
+                return Some(name.to_string());
+            }
         }
+        None
     }
 
     fn extract_coordinates(out: &str) -> Option<(f64, f64)> {
-        let p1 = out.find('(')?;
-        let p2 = out.find(')')?;
-        if p2 <= p1 {
-            return None;
+        let mut search_idx = 0;
+        while let Some(open_rel) = out[search_idx..].find('(') {
+            let open_pos = search_idx + open_rel;
+            if let Some(close_rel) = out[open_pos..].find(')') {
+                let close_pos = open_pos + close_rel;
+                let candidate = &out[open_pos + 1..close_pos];
+                let parts: Vec<&str> = candidate.split(',').collect();
+                if parts.len() == 2 {
+                    if let (Ok(lat_rad), Ok(lon_rad)) = (
+                        parts[0].trim().parse::<f64>(),
+                        parts[1].trim().parse::<f64>(),
+                    ) {
+                        let lat_deg = lat_rad * (180.0 / std::f64::consts::PI);
+                        let lon_deg = lon_rad * (180.0 / std::f64::consts::PI);
+                        if (-90.0..=90.0).contains(&lat_deg) && (-180.0..=180.0).contains(&lon_deg) {
+                            return Some((lat_deg, lon_deg));
+                        }
+                    }
+                }
+                search_idx = close_pos + 1;
+            } else {
+                break;
+            }
         }
-
-        let coord_str = &out[p1 + 1..p2];
-        let parts: Vec<&str> = coord_str.split(',').collect();
-        if parts.len() >= 2 {
-            let lat_rad: f64 = parts[0].trim().parse().ok()?;
-            let lon_rad: f64 = parts[1].trim().parse().ok()?;
-            let lat_deg = lat_rad * (180.0 / std::f64::consts::PI);
-            let lon_deg = lon_rad * (180.0 / std::f64::consts::PI);
-            Some((lat_deg, lon_deg))
-        } else {
-            None
-        }
+        None
     }
 
     fn fetch_ip_location(client: Option<&reqwest::blocking::Client>) -> (String, f64, f64) {
@@ -398,17 +412,24 @@ impl WeatherFetcher {
     }
 
     pub fn is_southern_hemisphere(&self) -> bool {
-        let guard = self.cache.lock();
+        let mut guard = self.cache.lock();
+        if let Some(is_south) = guard.cached_is_southern {
+            return is_south;
+        }
+
         if let Some(lat) = guard.detected_lat {
-            return lat < 0.0;
+            let is_south = lat < 0.0;
+            guard.cached_is_southern = Some(is_south);
+            return is_south;
         }
         if let Some(ref g) = guard.gnome_loc {
-            return g.lat < 0.0;
+            let is_south = g.lat < 0.0;
+            guard.cached_is_southern = Some(is_south);
+            return is_south;
         }
-        drop(guard);
 
         // Check /etc/localtime symlink
-        if let Ok(link) = std::fs::read_link("/etc/localtime") {
+        let is_south = if let Ok(link) = std::fs::read_link("/etc/localtime") {
             let path_str = link.to_string_lossy();
             if path_str.contains("Santiago")
                 || path_str.contains("Chile")
@@ -418,19 +439,50 @@ impl WeatherFetcher {
                 || path_str.contains("America/Sao_Paulo")
                 || path_str.contains("Australia")
                 || path_str.contains("Auckland")
+                || path_str.contains("Johannesburg")
+                || path_str.contains("Africa/Windhoek")
+                || path_str.contains("Antarctica")
             {
-                return true;
+                true
+            } else if path_str.contains("Europe")
+                || path_str.contains("America/New_York")
+                || path_str.contains("America/Los_Angeles")
+                || path_str.contains("America/Chicago")
+                || path_str.contains("Asia")
+                || path_str.contains("Canada")
+            {
+                false
+            } else {
+                // Fallback to TZ environment variable
+                if let Ok(tz) = std::env::var("TZ") {
+                    if tz.contains("Santiago") || tz.contains("Chile") || tz.contains("CLT") || tz.contains("CLST") {
+                        true
+                    } else if tz.contains("EST") || tz.contains("EDT") || tz.contains("CST") || tz.contains("CDT") || tz.contains("PST") || tz.contains("PDT") || tz.contains("GMT") || tz.contains("UTC") || tz.contains("CET") || tz.contains("CEST") {
+                        false
+                    } else {
+                        true
+                    }
+                } else {
+                    true
+                }
             }
-        }
-
-        // Check TZ environment variable
-        if let Ok(tz) = std::env::var("TZ") {
-            if tz.contains("Santiago") || tz.contains("Chile") || tz.contains("CLT") || tz.contains("CLST") {
-                return true;
+        } else {
+            // Check TZ environment variable
+            if let Ok(tz) = std::env::var("TZ") {
+                if tz.contains("Santiago") || tz.contains("Chile") || tz.contains("CLT") || tz.contains("CLST") {
+                    true
+                } else if tz.contains("EST") || tz.contains("EDT") || tz.contains("CST") || tz.contains("CDT") || tz.contains("PST") || tz.contains("PDT") || tz.contains("GMT") || tz.contains("UTC") || tz.contains("CET") || tz.contains("CEST") {
+                    false
+                } else {
+                    true
+                }
+            } else {
+                true
             }
-        }
+        };
 
-        true
+        guard.cached_is_southern = Some(is_south);
+        is_south
     }
 }
 
@@ -488,7 +540,6 @@ impl WeatherFxEngine {
             self.time = self.time.rem_euclid(std::f32::consts::PI * 200.0);
         }
         let mut rng = rand::thread_rng();
-        use rand::Rng;
         let width = self.width;
         let height = self.height;
         let ground_row = height.saturating_sub(2) as f32;
@@ -654,6 +705,34 @@ impl WeatherFxEngine {
             };
             self.particles.push(p);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_weathercode_symbols_and_names() {
+        assert_eq!(weathercode_symbol(0), "☀");
+        assert_eq!(weathercode_symbol(3), "☁");
+        assert_eq!(weathercode_symbol(61), "☂");
+        assert_eq!(weathercode_symbol(71), "❄");
+
+        assert_eq!(weathercode_full_name(0), "Clear Sky");
+        assert_eq!(weathercode_full_name(3), "Overcast");
+        assert_eq!(weathercode_full_name(61), "Rain");
+        assert_eq!(weathercode_full_name(71), "Snow");
+    }
+
+    #[test]
+    fn test_extract_gnome_coordinates_nested_gvariant() {
+        let gvariant = "[<(uint32 2, <('Concepción', 'SCIE', true, @a(dd) [(-0.6428661642861614, -1.2749377484439368)], @a(dd) [])>)>]";
+        let coords = WeatherFetcher::extract_coordinates(gvariant);
+        assert!(coords.is_some());
+        let (lat, lon) = coords.unwrap();
+        assert!((lat - -36.8335).abs() < 0.1);
+        assert!((lon - -73.0487).abs() < 0.1);
     }
 }
 

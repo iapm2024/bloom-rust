@@ -109,11 +109,7 @@ pub fn parse_cli_args() -> ConfigActionResult {
         _ => Hemisphere::Auto,
     };
 
-    let stars = if args.no_stars {
-        false
-    } else {
-        true
-    };
+    let stars = !args.no_stars;
 
     let enable_weather = !args.no_weather;
 
@@ -133,7 +129,7 @@ pub fn parse_cli_args() -> ConfigActionResult {
 }
 
 pub fn print_help() {
-    println!("bloom-rust {} by iapizarro", env!("CARGO_PKG_VERSION"));
+    println!("bloom-rust v{} by iapizarro", env!("CARGO_PKG_VERSION"));
     println!("Nord-themed Terminal Cherry Blossom Screensaver");
     println!("\nUsage: bloom-rust [OPTIONS]\n");
     println!("Options:");

@@ -1,4 +1,56 @@
 use rand::Rng;
+use crate::config::{Mood, Season};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BirdFlightState {
+    FlyingIn,
+    Perched,
+    FlyingOut,
+}
+
+#[derive(Debug, Clone)]
+pub struct Bird {
+    pub x: f32,
+    pub y: f32,
+    pub target_x: f32,
+    pub target_y: f32,
+    pub branch_r: usize,
+    pub branch_c: usize,
+    pub vx: f32,
+    pub vy: f32,
+    pub state: BirdFlightState,
+    pub perch_timer: f32,
+    pub facing_right: bool,
+    pub flap_timer: f32,
+    pub chirp_timer: f32,
+    pub is_chirping: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct Firefly {
+    pub x: f32,
+    pub y: f32,
+    pub vx: f32,
+    pub vy: f32,
+    pub pulse_phase: f32,
+    pub pulse_speed: f32,
+    pub wander_angle: f32,
+    pub wander_speed: f32,
+}
+
+#[derive(Debug, Clone)]
+pub struct FloatingPetal {
+    pub x: f32,
+    pub y: u16,
+    pub puddle_start: u16,
+    pub puddle_end: u16,
+    pub ch: char,
+    pub color_idx: usize,
+    pub vx: f32,
+    pub bob_phase: f32,
+    pub life: f32,
+    pub max_life: f32,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ParallaxLayer {
@@ -214,6 +266,10 @@ pub struct ParticleEngine {
     pub settled: Vec<SettledBlossom>,
     pub wind_streaks: Vec<WindStreak>,
     pub terrain: TerrainProfile,
+    pub birds: Vec<Bird>,
+    pub fireflies: Vec<Firefly>,
+    pub floating_petals: Vec<FloatingPetal>,
+    pub bird_spawn_timer: f32,
     pub width: u16,
     pub height: u16,
     pub speed: f32,
@@ -229,17 +285,46 @@ pub struct ParticleEngine {
     pub feedback_msg: Option<(String, std::time::Instant)>,
     pub art_height: usize,
     pub art_width: usize,
+    pub cached_branch_perches: Vec<(usize, usize)>,
 }
 
 impl ParticleEngine {
     pub fn new(tree_grid: &[Vec<char>], width: u16, height: u16, speed: f32, sway: f32) -> Self {
         let art_height = tree_grid.len();
         let art_width = tree_grid.iter().map(|r| r.len()).max().unwrap_or(80);
+
+        let mut cached_branch_perches = Vec::new();
+        if art_height > 10 && art_width > 10 {
+            let min_r = (art_height * 30) / 100;
+            let max_r = (art_height * 80) / 100;
+            for r in min_r..max_r {
+                if r < art_height {
+                    let row = &tree_grid[r];
+                    for (c, &ch) in row.iter().enumerate() {
+                        if matches!(ch, '#' | '%' | '@' | '=') {
+                            let space_above = if r > 0 && c < tree_grid[r - 1].len() {
+                                matches!(tree_grid[r - 1][c], ' ' | '*' | '+' | '.' | '~')
+                            } else {
+                                true
+                            };
+                            if space_above {
+                                cached_branch_perches.push((r, c));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         let mut engine = Self {
             leaves: Vec::with_capacity(384),
             settled: Vec::with_capacity(256),
             wind_streaks: Vec::with_capacity(32),
             terrain: TerrainProfile::new(width, height),
+            birds: Vec::with_capacity(4),
+            fireflies: Vec::with_capacity(32),
+            floating_petals: Vec::with_capacity(48),
+            bird_spawn_timer: 6.0,
             width,
             height,
             speed,
@@ -255,6 +340,7 @@ impl ParticleEngine {
             feedback_msg: None,
             art_height,
             art_width,
+            cached_branch_perches,
         };
         engine.spawn_initial(tree_grid);
         engine
@@ -293,6 +379,18 @@ impl ParticleEngine {
                 ch,
             });
         }
+
+        // Startle any perched birds into flight
+        for bird in &mut self.birds {
+            if bird.state == BirdFlightState::Perched {
+                bird.state = BirdFlightState::FlyingOut;
+                bird.is_chirping = false;
+                bird.vy = -0.7;
+                bird.vx = if self.gust_direction >= 0.0 { 1.3 } else { -1.3 };
+                bird.facing_right = bird.vx >= 0.0;
+            }
+        }
+
         self.set_feedback("Wind Gust Surge Triggered");
     }
 
@@ -308,6 +406,9 @@ impl ParticleEngine {
         }
         self.settled.retain(|s| s.x < width && s.y < height);
         self.wind_streaks.retain(|w| w.x < max_w && w.y < max_h);
+        self.floating_petals.retain(|fp| (fp.x.round() as u16) < width && fp.y < height);
+        self.fireflies.retain(|ff| (ff.x.round() as u16) < width && (ff.y.round() as u16) < height);
+        self.birds.retain(|b| b.x >= -12.0 && b.x <= (width + 12) as f32 && b.y >= -6.0 && b.y <= height as f32);
     }
 
     fn spawn_initial(&mut self, tree_grid: &[Vec<char>]) {
@@ -323,7 +424,7 @@ impl ParticleEngine {
     fn create_particle(width: u16, height: u16, speed: f32, _tree_grid: &[Vec<char>], rng: &mut impl Rng) -> Leaf {
         let chars = ['*', '+', '.', 'o', '%', '#', '·'];
         let base_ch = chars[rng.gen_range(0..chars.len())];
-        let color_idx = rng.gen_range(0..4);
+        let color_idx = rng.gen_range(0..8);
         let layer = if rng.gen_bool(0.45) {
             ParallaxLayer::Background
         } else {
@@ -353,7 +454,7 @@ impl ParticleEngine {
         }
     }
 
-    pub fn tick(&mut self, tree_grid: &[Vec<char>]) {
+    pub fn tick(&mut self, tree_grid: &[Vec<char>], season: Season, mood: Mood, is_raining: bool) {
         self.time += 0.033;
         if self.time > 100_000.0 {
             self.time = self.time.rem_euclid(std::f32::consts::PI * 200.0);
@@ -426,8 +527,8 @@ impl ParticleEngine {
         let tree_offset_x = (width as usize).saturating_sub(art_width) / 2;
         let tree_offset_y = target_height.saturating_sub(art_height);
 
-        let step_y = if target_height > 1 {
-            (art_height - 1) as f32 / (target_height - 1) as f32
+        let step_y = if target_height > 1 && art_height > 1 {
+            ((art_height - 1) as f32 / (target_height - 1) as f32).max(0.001)
         } else {
             1.0
         };
@@ -518,25 +619,49 @@ impl ParticleEngine {
 
                     if p.y >= target_ground_y as f32 {
                         let gx = (p.x.round() as u16).min(width.saturating_sub(1));
-                        let mound_h = self.terrain.mound_levels.get(gx as usize).copied().unwrap_or(0.0);
-                        let mound_layer = if mound_h >= 1.8 { 2 } else if mound_h >= 0.8 { 1 } else { 0 };
+                        let in_puddle = if is_raining {
+                            self.terrain.puddles.iter().find(|&&(s, e)| gx >= s && gx < e).copied()
+                        } else {
+                            None
+                        };
 
-                        let gy = target_ground_y.saturating_sub(mound_layer as u16);
+                        if let Some((p_start, p_end)) = in_puddle {
+                            if self.floating_petals.len() < 40 {
+                                self.floating_petals.push(FloatingPetal {
+                                    x: gx as f32,
+                                    y: target_ground_y,
+                                    puddle_start: p_start,
+                                    puddle_end: p_end,
+                                    ch: p.current_glyph(),
+                                    color_idx: p.color_idx,
+                                    vx: rng.gen_range(-0.06..0.06) + self.current_wind * 0.04,
+                                    bob_phase: rng.gen_range(0.0..std::f32::consts::PI * 2.0),
+                                    life: 0.0,
+                                    max_life: rng.gen_range(8.0..16.0),
+                                });
+                            }
+                            *p = Self::create_particle(width, height, speed, tree_grid, &mut rng);
+                        } else {
+                            let mound_h = self.terrain.mound_levels.get(gx as usize).copied().unwrap_or(0.0);
+                            let mound_layer = if mound_h >= 1.8 { 2 } else if mound_h >= 0.8 { 1 } else { 0 };
 
-                        if self.settled.len() < 180 {
-                            self.settled.push(SettledBlossom {
-                                x: gx,
-                                y: gy,
-                                ch: p.current_glyph(),
-                                color_idx: p.color_idx,
-                                alpha: 1.0,
-                                decay_rate: rng.gen_range(0.003..0.006),
-                                mound_layer,
-                            });
-                            self.terrain.add_petal_to_mound(gx);
+                            let gy = target_ground_y.saturating_sub(mound_layer as u16);
+
+                            if self.settled.len() < 180 {
+                                self.settled.push(SettledBlossom {
+                                    x: gx,
+                                    y: gy,
+                                    ch: p.current_glyph(),
+                                    color_idx: p.color_idx,
+                                    alpha: 1.0,
+                                    decay_rate: rng.gen_range(0.003..0.006),
+                                    mound_layer,
+                                });
+                                self.terrain.add_petal_to_mound(gx);
+                            }
+
+                            *p = Self::create_particle(width, height, speed, tree_grid, &mut rng);
                         }
-
-                        *p = Self::create_particle(width, height, speed, tree_grid, &mut rng);
                     }
 
                     if p.x < 0.0 {
@@ -568,6 +693,165 @@ impl ParticleEngine {
         }
         self.settled.retain(|s| s.alpha > 0.0);
 
+        // 5. Update Floating Petals in Rain Puddles
+        let decay_mult = if is_raining { 1.0 } else { 3.5 };
+        for fp in &mut self.floating_petals {
+            fp.life += 0.033 * decay_mult;
+            fp.bob_phase = (fp.bob_phase + 0.1).rem_euclid(std::f32::consts::PI * 2.0);
+            let water_drift = (self.current_wind * 0.07) + (self.time * 2.2 + fp.bob_phase).sin() * 0.04;
+            fp.x += fp.vx + water_drift;
+            if fp.x < fp.puddle_start as f32 {
+                fp.x = fp.puddle_start as f32;
+                fp.vx = fp.vx.abs();
+            } else if fp.x >= fp.puddle_end as f32 {
+                fp.x = (fp.puddle_end.saturating_sub(1)) as f32;
+                fp.vx = -fp.vx.abs();
+            }
+        }
+        self.floating_petals.retain(|fp| fp.life < fp.max_life);
+
+        // 6. Update Summer Night Fireflies (Hotaru)
+        let is_summer_night = season == Season::Summer && mood == Mood::Night;
+        if is_summer_night {
+            if self.fireflies.len() < 22 && rng.gen_bool(0.25) {
+                let min_fx = 2.0f32;
+                let max_fx = (width.saturating_sub(2) as f32).max(min_fx + 1.0);
+                let fx = rng.gen_range(min_fx..max_fx);
+                let gy = self.terrain.get_ground_y(fx as u16) as f32;
+                let min_fy = 2.0f32;
+                let max_fy = gy.max(min_fy + 1.0);
+                let fy = rng.gen_range(min_fy..max_fy);
+                self.fireflies.push(Firefly {
+                    x: fx,
+                    y: fy,
+                    vx: rng.gen_range(-0.15..0.15),
+                    vy: rng.gen_range(-0.1..0.1),
+                    pulse_phase: rng.gen_range(0.0..std::f32::consts::PI * 2.0),
+                    pulse_speed: rng.gen_range(0.04..0.09),
+                    wander_angle: rng.gen_range(0.0..std::f32::consts::PI * 2.0),
+                    wander_speed: rng.gen_range(0.12..0.28),
+                });
+            }
+        } else if !self.fireflies.is_empty() {
+            self.fireflies.pop();
+        }
+
+        for ff in &mut self.fireflies {
+            ff.pulse_phase = (ff.pulse_phase + ff.pulse_speed).rem_euclid(std::f32::consts::PI * 2.0);
+            ff.wander_angle += rng.gen_range(-0.3..0.3);
+            ff.vx = ff.vx * 0.92 + ff.wander_angle.cos() * ff.wander_speed * 0.08;
+            ff.vy = ff.vy * 0.92 + (ff.wander_angle.sin() * ff.wander_speed * 0.5) * 0.08;
+            ff.x += ff.vx + self.current_wind * 0.06;
+            ff.y += ff.vy;
+
+            let max_w = (width.saturating_sub(2) as f32).max(2.0);
+            let max_h = (height.saturating_sub(3) as f32).max(3.0);
+            if ff.x < 1.0 { ff.x = 1.0; ff.vx = ff.vx.abs(); }
+            if ff.x > max_w { ff.x = max_w; ff.vx = -ff.vx.abs(); }
+            if ff.y < 2.0 { ff.y = 2.0; ff.vy = ff.vy.abs(); }
+            if ff.y > max_h { ff.y = max_h; ff.vy = -ff.vy.abs(); }
+        }
+
+        // 7. Update Perching Birds (Japanese White-Eye / Sparrow)
+        self.bird_spawn_timer -= 0.033;
+        if self.bird_spawn_timer <= 0.0 && self.birds.len() < 2 && !self.cached_branch_perches.is_empty() {
+            self.bird_spawn_timer = rng.gen_range(16.0..32.0);
+            let &(target_r, target_c) = &self.cached_branch_perches[rng.gen_range(0..self.cached_branch_perches.len())];
+            let (target_x, target_y) = if is_1to1 {
+                ((tree_offset_x + target_c) as f32, (tree_offset_y + target_r).saturating_sub(1) as f32)
+            } else {
+                let sc = (target_c as f32 / step_x).round() as usize;
+                let sr = ((target_r as f32 / step_y).round() as usize).saturating_sub(1);
+                ((scaled_offset_x + sc) as f32, sr as f32)
+            };
+
+            let from_left = rng.gen_bool(0.5);
+            let spawn_x = if from_left { -4.0 } else { (width + 4) as f32 };
+            let min_y = 2.0f32;
+            let max_y = target_y.max(min_y + 1.0);
+            let spawn_y = rng.gen_range(min_y..max_y);
+            let dx = target_x - spawn_x;
+            let dy = target_y - spawn_y;
+            let dist = (dx * dx + dy * dy).sqrt().max(1.0);
+            let speed = rng.gen_range(0.65..0.95);
+
+            self.birds.push(Bird {
+                x: spawn_x,
+                y: spawn_y,
+                target_x,
+                target_y,
+                branch_r: target_r,
+                branch_c: target_c,
+                vx: (dx / dist) * speed,
+                vy: (dy / dist) * speed,
+                state: BirdFlightState::FlyingIn,
+                perch_timer: rng.gen_range(7.0..16.0),
+                facing_right: dx >= 0.0,
+                flap_timer: 0.0,
+                chirp_timer: rng.gen_range(2.0..4.0),
+                is_chirping: false,
+            });
+        }
+
+        for bird in &mut self.birds {
+            match bird.state {
+                BirdFlightState::FlyingIn => {
+                    bird.flap_timer += 0.033;
+                    let dx = bird.target_x - bird.x;
+                    let dy = bird.target_y - bird.y;
+                    let dist = (dx * dx + dy * dy).sqrt();
+                    if dist < 1.2 {
+                        bird.x = bird.target_x;
+                        bird.y = bird.target_y;
+                        bird.state = BirdFlightState::Perched;
+                        bird.vx = 0.0;
+                        bird.vy = 0.0;
+                    } else {
+                        bird.facing_right = dx >= 0.0;
+                        let fly_speed = 0.75;
+                        bird.vx = (dx / dist) * fly_speed;
+                        bird.vy = (dy / dist) * fly_speed;
+                        bird.x += bird.vx;
+                        bird.y += bird.vy;
+                    }
+                }
+                BirdFlightState::Perched => {
+                    bird.perch_timer -= 0.033;
+                    bird.chirp_timer -= 0.033;
+                    if bird.chirp_timer <= 0.0 {
+                        bird.is_chirping = !bird.is_chirping;
+                        bird.chirp_timer = if bird.is_chirping {
+                            rng.gen_range(0.8..1.5)
+                        } else {
+                            rng.gen_range(2.5..5.5)
+                        };
+                    }
+                    if rng.gen_bool(0.015) {
+                        bird.facing_right = !bird.facing_right;
+                    }
+                    if self.gust_intensity > 0.75 {
+                        bird.state = BirdFlightState::FlyingOut;
+                        bird.is_chirping = false;
+                        bird.vy = rng.gen_range(-0.9..-0.6);
+                        bird.vx = if self.gust_direction >= 0.0 { rng.gen_range(0.8..1.5) } else { rng.gen_range(-1.5..-0.8) };
+                        bird.facing_right = bird.vx >= 0.0;
+                    } else if bird.perch_timer <= 0.0 {
+                        bird.state = BirdFlightState::FlyingOut;
+                        bird.is_chirping = false;
+                        bird.vy = rng.gen_range(-0.7..-0.4);
+                        bird.vx = if bird.facing_right { rng.gen_range(0.6..1.2) } else { rng.gen_range(-1.2..-0.6) };
+                    }
+                }
+                BirdFlightState::FlyingOut => {
+                    bird.flap_timer += 0.033;
+                    bird.x += bird.vx + self.current_wind * 0.05;
+                    bird.y += bird.vy;
+                    bird.facing_right = bird.vx >= 0.0;
+                }
+            }
+        }
+        self.birds.retain(|b| b.x >= -12.0 && b.x <= (width + 12) as f32 && b.y >= -6.0 && b.y <= height as f32);
+
         while self.leaves.len() < self.target_count {
             self.leaves.push(Self::create_particle(width, height, speed, tree_grid, &mut rng));
         }
@@ -593,5 +877,108 @@ mod tests {
         let initial_mound = terrain.mound_levels[10];
         terrain.add_petal_to_mound(10);
         assert!(terrain.mound_levels[10] > initial_mound);
+    }
+
+    #[test]
+    fn test_bird_perch_and_startle() {
+        let bird = Bird {
+            x: 40.0,
+            y: 10.0,
+            target_x: 40.0,
+            target_y: 10.0,
+            branch_r: 15,
+            branch_c: 40,
+            vx: 0.0,
+            vy: 0.0,
+            state: BirdFlightState::Perched,
+            perch_timer: 10.0,
+            facing_right: true,
+            flap_timer: 0.0,
+            chirp_timer: 2.0,
+            is_chirping: false,
+        };
+        assert_eq!(bird.state, BirdFlightState::Perched);
+
+        // Simulate a gust startle
+        let grid = vec![vec!['#'; 80]; 24];
+        let mut engine = ParticleEngine::new(&grid, 80, 24, 1.0, 1.0);
+        engine.birds.push(bird);
+        engine.trigger_gust();
+        assert_eq!(engine.birds[0].state, BirdFlightState::FlyingOut);
+        assert!(engine.birds[0].vy < 0.0); // Flying upward
+    }
+
+    #[test]
+    fn test_fireflies_pulse_and_wander() {
+        let mut ff = Firefly {
+            x: 30.0,
+            y: 12.0,
+            vx: 0.1,
+            vy: -0.05,
+            pulse_phase: 0.0,
+            pulse_speed: 0.05,
+            wander_angle: 0.0,
+            wander_speed: 0.2,
+        };
+        let initial_phase = ff.pulse_phase;
+        ff.pulse_phase += ff.pulse_speed;
+        assert!(ff.pulse_phase > initial_phase);
+    }
+
+    #[test]
+    fn test_floating_petals_puddle_drift() {
+        let mut fp = FloatingPetal {
+            x: 15.0,
+            y: 22,
+            puddle_start: 10,
+            puddle_end: 25,
+            ch: '*',
+            color_idx: 0,
+            vx: 0.5,
+            bob_phase: 0.0,
+            life: 0.0,
+            max_life: 10.0,
+        };
+        fp.x += fp.vx;
+        assert!(fp.x >= 10.0 && fp.x <= 25.0);
+    }
+
+    #[test]
+    fn test_summer_night_firefly_spawning_and_tick() {
+        let grid = vec![vec!['#'; 80]; 24];
+        let mut engine = ParticleEngine::new(&grid, 80, 24, 1.0, 1.0);
+        // Run multiple ticks in Summer Night mode to trigger firefly spawning and movement
+        for _ in 0..100 {
+            engine.tick(&grid, Season::Summer, Mood::Night, false);
+        }
+        // Fireflies should have spawned without panicking
+        assert!(!engine.fireflies.is_empty());
+    }
+
+    #[test]
+    fn test_bird_expiry_and_flight_out_no_panic() {
+        let grid = vec![vec!['#'; 80]; 24];
+        let mut engine = ParticleEngine::new(&grid, 80, 24, 1.0, 1.0);
+        let bird = Bird {
+            x: 40.0,
+            y: 10.0,
+            target_x: 40.0,
+            target_y: 10.0,
+            branch_r: 15,
+            branch_c: 40,
+            vx: 0.0,
+            vy: 0.0,
+            state: BirdFlightState::Perched,
+            perch_timer: 0.01, // Near expiry
+            facing_right: true,
+            flap_timer: 0.0,
+            chirp_timer: 2.0,
+            is_chirping: false,
+        };
+        engine.birds.push(bird);
+        // Ticking should transition bird to FlyingOut with negative vy without panicking
+        engine.tick(&grid, Season::Spring, Mood::Day, false);
+        assert_eq!(engine.birds[0].state, BirdFlightState::FlyingOut);
+        assert!(engine.birds[0].vy < 0.0);
     }
 }

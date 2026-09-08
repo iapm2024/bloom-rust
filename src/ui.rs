@@ -15,6 +15,52 @@ use unicode_width::UnicodeWidthStr;
 
 use std::cell::RefCell;
 
+#[allow(dead_code)]
+pub mod palette {
+    use ratatui::style::Color;
+
+    // Aurora & Sakura Spectrum
+    pub const SAKURA_PURPLE: Color = Color::Rgb(180, 142, 173); // #B48EAD (Nord15)
+    pub const AURORA_GREEN: Color = Color::Rgb(163, 190, 140);  // #A3BE8C (Nord14)
+    pub const AURORA_YELLOW: Color = Color::Rgb(235, 203, 139); // #EBCB8B (Nord13)
+    pub const AURORA_ORANGE: Color = Color::Rgb(208, 135, 112); // #D08770 (Nord12)
+    pub const AURORA_RED: Color = Color::Rgb(191, 97, 106);     // #BF616A (Nord11)
+
+    // Warm Amber & Golden Honey Gradient
+    pub const GOLD_CHAMPAGNE: Color = Color::Rgb(245, 224, 179); // #F5E0B3
+    pub const HONEY_GOLD: Color = Color::Rgb(223, 192, 124);     // #DFC07C
+    pub const GOLDEN_OCHRE: Color = Color::Rgb(201, 166, 93);    // #C9A65D
+    pub const AMBER_BRONZE: Color = Color::Rgb(163, 129, 61);    // #A3813D
+
+    // Frost & Glacial Cyan / Teal Gradient
+    pub const GLACIAL_MIST: Color = Color::Rgb(194, 229, 228);   // #C2E5E4
+    pub const SOFT_FROST_TEAL: Color = Color::Rgb(168, 209, 208); // #A8D1D0
+    pub const NORD_FROST_TEAL: Color = Color::Rgb(143, 188, 187); // #8FBCBB (Nord7)
+    pub const NORD_FROST_CYAN: Color = Color::Rgb(136, 191, 208); // #88BFD0 (Nord8)
+    pub const SEA_TEAL: Color = Color::Rgb(111, 158, 157);       // #6F9E9D
+    pub const PINE_TEAL: Color = Color::Rgb(82, 126, 125);       // #527E7D
+    pub const GLACIAL_BLUE: Color = Color::Rgb(129, 161, 193);   // #81A1C1 (Nord9)
+    pub const ARCTIC_BLUE: Color = Color::Rgb(94, 129, 172);     // #5E81AC (Nord10)
+
+    // Blossom Plum / Violet / Heather Gradient
+    pub const SAKURA_MIST: Color = Color::Rgb(216, 191, 212);    // #D8BFD4
+    pub const WISTERIA_VIOLET: Color = Color::Rgb(157, 146, 189); // #9D92BD
+    pub const BLOSSOM_ROSE: Color = Color::Rgb(194, 139, 159);   // #C28B9F
+    pub const DUSK_MAUVE: Color = Color::Rgb(143, 108, 137);     // #8F6C89
+    pub const SHADOW_PLUM: Color = Color::Rgb(102, 73, 97);      // #664961
+
+    // Polar Night Slate & Shadow
+    pub const POLAR_SLATE_BRIGHT: Color = Color::Rgb(76, 86, 106); // #4C566A (Nord3)
+    pub const POLAR_SLATE_MED: Color = Color::Rgb(67, 76, 94);     // #434C5E (Nord2)
+    pub const POLAR_SLATE_DARK: Color = Color::Rgb(59, 66, 82);    // #3B4252 (Nord1)
+    pub const POLAR_NIGHT_BASE: Color = Color::Rgb(46, 52, 64);    // #2E3440 (Nord0)
+
+    // Snow Storm & Radiant Whites
+    pub const SNOW_WHITE: Color = Color::Rgb(236, 239, 244);     // #ECEFF4 (Nord6)
+    pub const SNOW_STORM: Color = Color::Rgb(229, 233, 240);     // #E5E9F0 (Nord5)
+    pub const SNOW_MIST: Color = Color::Rgb(216, 222, 233);      // #D8DEE9 (Nord4)
+}
+
 #[derive(Default)]
 pub struct TreeColorCache {
     cached_season: Option<Season>,
@@ -124,8 +170,8 @@ pub fn render_ui(
     }
 
     let nord_bg = match config.mood {
-        Mood::Night => Color::Rgb(46, 52, 64),   // Nord0 Polar Night (#2E3440)
-        Mood::Day => Color::Rgb(229, 233, 240),  // Nord4 Snow Storm (#E5E9F0)
+        Mood::Night => palette::POLAR_NIGHT_BASE, // Nord0 Polar Night (#2E3440)
+        Mood::Day => palette::SNOW_STORM,         // Nord5 Snow Storm (#E5E9F0)
     };
 
     // 1. Fill solid screen background
@@ -143,15 +189,15 @@ pub fn render_ui(
             if star.x < area.width && star.y < area.height.saturating_sub(2) {
                 let val = star.phase.sin();
                 let (ch, color) = if val > 0.75 {
-                    ('*', Color::Rgb(236, 239, 244)) // Nord6 Pure Snow White (Peak twinkle)
+                    ('*', palette::SNOW_WHITE)       // #ECEFF4 Peak twinkle
                 } else if val > 0.4 {
-                    ('+', Color::Rgb(136, 192, 208)) // Nord8 Frost Cyan (Bright glow)
+                    ('+', palette::GLACIAL_MIST)     // #C2E5E4 Bright glow
                 } else if val > 0.0 {
-                    ('.', Color::Rgb(143, 188, 187)) // Nord7 Frost Teal (Soft glow)
+                    ('.', palette::SOFT_FROST_TEAL)  // #A8D1D0 Soft glow
                 } else if val > -0.5 {
-                    ('.', Color::Rgb(129, 161, 193)) // Nord9 Glacial Blue (Dim star)
+                    ('.', palette::GLACIAL_BLUE)     // #81A1C1 Dim star
                 } else {
-                    ('.', Color::Rgb(94, 129, 172))  // Nord10 Deep Arctic Blue (Subtle background star)
+                    ('.', palette::ARCTIC_BLUE)      // #5E81AC Deep arctic star
                 };
 
                 set_cell(buf, star.x, star.y, ch, color, nord_bg);
@@ -166,8 +212,8 @@ pub fn render_ui(
             let py = wp.y.round() as u16;
             if px < area.width && py < area.height.saturating_sub(1) {
                 let color = match config.mood {
-                    Mood::Night => Color::Rgb(76, 86, 106),  // Nord3 Polar Night Slate (#4C566A)
-                    Mood::Day => Color::Rgb(216, 222, 233),  // Nord4 Snow Storm Mist
+                    Mood::Night => palette::POLAR_SLATE_BRIGHT, // Nord3 Slate (#4C566A)
+                    Mood::Day => palette::SNOW_MIST,            // Nord4 Snow Storm Mist (#D8DEE9)
                 };
                 set_cell(buf, px, py, wp.ch, color, nord_bg);
             }
@@ -215,15 +261,19 @@ pub fn render_ui(
                         continue;
                     }
 
-                    let sway_dx = compute_char_sway(
-                        row_sway,
-                        h_frac,
-                        r,
-                        c,
-                        art_width,
-                        particles.time,
-                        particles.sway,
-                    );
+                    let sway_dx = if h_frac > 0.0 {
+                        compute_char_sway(
+                            row_sway,
+                            h_frac,
+                            r,
+                            c,
+                            art_width,
+                            particles.time,
+                            particles.sway,
+                        )
+                    } else {
+                        row_sway.round().clamp(-2.0, 2.0) as i32
+                    };
 
                     let px_i32 = offset_x as i32 + c as i32 + sway_dx;
                     if px_i32 >= 0 && px_i32 < area.width as i32 {
@@ -235,8 +285,8 @@ pub fn render_ui(
             }
         } else {
             // Proportional Scaling to fit inside small terminal height with organic sway
-            let step_y = if target_height > 1 {
-                (art_height - 1) as f32 / (target_height - 1) as f32
+            let step_y = if target_height > 1 && art_height > 1 {
+                ((art_height - 1) as f32 / (target_height - 1) as f32).max(0.001)
             } else {
                 1.0
             };
@@ -265,15 +315,19 @@ pub fn render_ui(
                         let sx = ((bx as f32 * step_x).round() as usize).min(row_len.saturating_sub(1));
                         let ch = row[sx];
                         if ch != ' ' {
-                            let sway_dx = compute_char_sway(
-                                row_sway,
-                                h_frac,
-                                sy,
-                                sx,
-                                art_width,
-                                particles.time,
-                                particles.sway,
-                            );
+                            let sway_dx = if h_frac > 0.0 {
+                                compute_char_sway(
+                                    row_sway,
+                                    h_frac,
+                                    sy,
+                                    sx,
+                                    art_width,
+                                    particles.time,
+                                    particles.sway,
+                                )
+                            } else {
+                                row_sway.round().clamp(-2.0, 2.0) as i32
+                            };
 
                             let px_i32 = offset_x as i32 + bx as i32 + sway_dx;
                             let py = by as u16;
@@ -290,8 +344,19 @@ pub fn render_ui(
         }
     });
 
-    // 6. Render Organic Contoured Ground Terrain, Grass Tufts & Puddle Reflections
-    render_terrain_and_puddles(buf, &particles.terrain, area, season, config.mood, nord_bg, current_condition, particles.time);
+    // 6. Render Organic Contoured Ground Terrain, Grass Tufts, Puddle Reflections & Floating Petals
+    render_terrain_and_puddles(
+        buf,
+        &particles.terrain,
+        &particles.floating_petals,
+        blossom_colors,
+        area,
+        season,
+        config.mood,
+        nord_bg,
+        current_condition,
+        particles.time,
+    );
 
     // 7. Render Settled Ground Blossom Carpet & Accumulation Mounds
     for s in &particles.settled {
@@ -300,24 +365,31 @@ pub fn render_ui(
             let base_color = blossom_colors[s.color_idx % blossom_colors.len()];
 
             // Multi-stage fading gradient as petals rest and dissolve into earth
-            let color = if s.alpha > 0.65 {
+            let color = if s.alpha > 0.70 {
                 base_color
-            } else if s.alpha > 0.35 {
+            } else if s.alpha > 0.45 {
                 match season {
-                    Season::Spring | Season::Auto => Color::Rgb(180, 142, 173), // Nord15 Sakura Pink (#B48EAD)
-                    Season::Summer => Color::Rgb(143, 188, 187),                // Nord7 Frost Teal (#8FBCBB)
-                    Season::Autumn => Color::Rgb(208, 135, 112),                // Nord12 Aurora Orange (#D08770)
-                    Season::Winter => Color::Rgb(136, 192, 208),                // Nord8 Frost Cyan (#88C0D0)
+                    Season::Spring | Season::Auto => palette::BLOSSOM_ROSE,   // #C28B9F Blossom Rose
+                    Season::Summer => palette::SEA_TEAL,                     // #6F9E9D Sea Teal
+                    Season::Autumn => palette::AURORA_ORANGE,                 // #D08770 Aurora Coral
+                    Season::Winter => palette::NORD_FROST_CYAN,               // #88BFD0 Frost Cyan
                 }
-            } else if s.alpha > 0.15 {
+            } else if s.alpha > 0.25 {
+                match season {
+                    Season::Spring | Season::Auto => palette::DUSK_MAUVE,     // #8F6C89 Dusk Mauve
+                    Season::Summer => palette::PINE_TEAL,                    // #527E7D Pine Teal
+                    Season::Autumn => palette::AMBER_BRONZE,                  // #A3813D Bronze Amber
+                    Season::Winter => palette::ARCTIC_BLUE,                   // #5E81AC Arctic Blue
+                }
+            } else if s.alpha > 0.10 {
                 match config.mood {
-                    Mood::Night => Color::Rgb(94, 129, 172),                    // Nord10 Deep Arctic Blue (#5E81AC)
-                    Mood::Day => Color::Rgb(129, 161, 193),                     // Nord9 Glacial Blue (#81A1C1)
+                    Mood::Night => palette::ARCTIC_BLUE,                      // #5E81AC Deep Arctic Blue
+                    Mood::Day => palette::GLACIAL_BLUE,                       // #81A1C1 Glacial Blue
                 }
             } else {
                 match config.mood {
-                    Mood::Night => Color::Rgb(76, 86, 106),                     // Nord3 Polar Night Slate (#4C566A)
-                    Mood::Day => Color::Rgb(67, 76, 94),                       // Nord2 Deep Slate (#434C5E)
+                    Mood::Night => palette::POLAR_SLATE_BRIGHT,               // #4C566A Polar Slate
+                    Mood::Day => palette::POLAR_SLATE_MED,                    // #434C5E Deep Slate
                 }
             };
 
@@ -341,18 +413,115 @@ pub fn render_ui(
         }
     }
 
+    // 8.5 Render Summer Night Fireflies (Hotaru)
+    for ff in &particles.fireflies {
+        let px = ff.x.round() as u16;
+        let py = ff.y.round() as u16;
+        if px < area.width && py < area.height.saturating_sub(1) {
+            let brightness = (ff.pulse_phase.sin() * 0.5 + 0.5).powi(2);
+            if brightness > 0.15 {
+                let (glyph, col) = if brightness > 0.72 {
+                    ('✦', palette::GOLD_CHAMPAGNE) // #F5E0B3 Peak Champagne glow
+                } else if brightness > 0.42 {
+                    ('*', palette::HONEY_GOLD)     // #DFC07C Soft Honey glow
+                } else {
+                    ('·', palette::SOFT_FROST_TEAL) // #A8D1D0 Soft Frost glow
+                };
+                set_cell(buf, px, py, glyph, col, nord_bg);
+            }
+        }
+    }
+
+    // 8.6 Render Perching & Flying Wildlife Birds (Japanese White-Eye / Sparrow)
+    for bird in &particles.birds {
+        let (draw_x, draw_y) = match bird.state {
+            crate::physics::BirdFlightState::Perched => {
+                let row_sway = compute_tree_row_sway(
+                    bird.branch_r,
+                    art_height,
+                    particles.time,
+                    particles.sway,
+                    particles.gust_intensity,
+                    particles.gust_direction,
+                );
+                let sway_dx = compute_char_sway(
+                    row_sway.0,
+                    row_sway.1,
+                    bird.branch_r,
+                    bird.branch_c,
+                    art_width,
+                    particles.time,
+                    particles.sway,
+                );
+                (bird.target_x + sway_dx as f32, bird.target_y)
+            }
+            crate::physics::BirdFlightState::FlyingIn | crate::physics::BirdFlightState::FlyingOut => {
+                (bird.x, bird.y)
+            }
+        };
+
+        let bx = draw_x.round() as i32;
+        let by = draw_y.round() as i32;
+
+        if by >= 0 && by < area.height.saturating_sub(1) as i32 {
+            let by_u = by as u16;
+            match bird.state {
+                crate::physics::BirdFlightState::Perched => {
+                    let bird_chars = if bird.facing_right {
+                        if bird.is_chirping {
+                            [('>', palette::AURORA_GREEN), ('o', palette::SNOW_WHITE), ('♪', palette::HONEY_GOLD)]
+                        } else {
+                            [('>', palette::AURORA_GREEN), ('•', palette::SNOW_WHITE), ('>', palette::HONEY_GOLD)]
+                        }
+                    } else {
+                        if bird.is_chirping {
+                            [('♪', palette::HONEY_GOLD), ('o', palette::SNOW_WHITE), ('<', palette::AURORA_GREEN)]
+                        } else {
+                            [('<', palette::HONEY_GOLD), ('•', palette::SNOW_WHITE), ('<', palette::AURORA_GREEN)]
+                        }
+                    };
+                    for (idx, &(ch, col)) in bird_chars.iter().enumerate() {
+                        let px = bx + idx as i32 - 1;
+                        if px >= 0 && px < area.width as i32 {
+                            set_cell(buf, px as u16, by_u, ch, col, nord_bg);
+                        }
+                    }
+                }
+                crate::physics::BirdFlightState::FlyingIn | crate::physics::BirdFlightState::FlyingOut => {
+                    let flap_frame = ((bird.flap_timer * 10.0) as usize) % 3;
+                    let fly_chars = match flap_frame {
+                        0 => ('^', 'v', '^'),
+                        1 => ('~', '•', '~'),
+                        _ => ('v', '•', 'v'),
+                    };
+                    let body_col = palette::AURORA_GREEN;
+                    let eye_col = palette::SNOW_WHITE;
+                    let spans = [(fly_chars.0, body_col), (fly_chars.1, eye_col), (fly_chars.2, body_col)];
+                    for (idx, &(ch, col)) in spans.iter().enumerate() {
+                        let px = bx + idx as i32 - 1;
+                        if px >= 0 && px < area.width as i32 {
+                            set_cell(buf, px as u16, by_u, ch, col, nord_bg);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     // 9. Render Dynamic Wind Gust Trails
     for streak in &particles.wind_streaks {
         let sx = streak.x.round() as u16;
         let sy = streak.y.round() as u16;
         if sx < area.width && sy < area.height.saturating_sub(1) {
             let life_frac = 1.0 - (streak.life / streak.max_life.max(0.1));
-            let streak_color = if life_frac > 0.6 {
-                Color::Rgb(136, 192, 208) // Nord8 Frost Cyan
-            } else if life_frac > 0.3 {
-                Color::Rgb(129, 161, 193) // Nord9 Glacial Blue
+            let streak_color = if life_frac > 0.7 {
+                palette::GLACIAL_MIST     // #C2E5E4
+            } else if life_frac > 0.4 {
+                palette::NORD_FROST_CYAN  // #88BFD0
+            } else if life_frac > 0.2 {
+                palette::GLACIAL_BLUE     // #81A1C1
             } else {
-                Color::Rgb(94, 129, 172)  // Nord10 Deep Arctic Blue
+                palette::ARCTIC_BLUE      // #5E81AC
             };
             set_cell(buf, sx, sy, streak.ch, streak_color, nord_bg);
         }
@@ -367,19 +536,19 @@ pub fn render_ui(
             if px < area.width && py < area.height.saturating_sub(1) {
                 let color = match wp.kind {
                     WeatherFxKind::RainDrop => match config.mood {
-                        Mood::Night => Color::Rgb(129, 161, 193), // Nord9 Glacial Blue (#81A1C1)
-                        Mood::Day => Color::Rgb(94, 129, 172),   // Nord10 Deep Arctic Blue (#5E81AC)
+                        Mood::Night => palette::GLACIAL_BLUE, // #81A1C1
+                        Mood::Day => palette::ARCTIC_BLUE,    // #5E81AC
                     },
-                    WeatherFxKind::RainSplash => Color::Rgb(136, 192, 208), // Nord8 Frost Cyan (#88C0D0)
+                    WeatherFxKind::RainSplash => palette::GLACIAL_MIST, // #C2E5E4
                     WeatherFxKind::SnowFlake => match wp.phase.sin() > 0.0 {
-                        true => Color::Rgb(236, 239, 244),  // Nord6 Pure Snow (#ECEFF4)
-                        false => Color::Rgb(216, 222, 233), // Nord4 Snow Storm (#D8DEE9)
+                        true => palette::SNOW_WHITE, // #ECEFF4
+                        false => palette::SNOW_MIST, // #D8DEE9
                     },
                     WeatherFxKind::SunGlimmer => match config.mood {
-                        Mood::Night => Color::Rgb(136, 192, 208), // Nord8 Aurora Cyan Glimmer
-                        Mood::Day => Color::Rgb(235, 203, 139),   // Nord13 Amber Sunlight Glimmer
+                        Mood::Night => palette::GLACIAL_MIST,    // #C2E5E4 Aurora Glimmer
+                        Mood::Day => palette::GOLD_CHAMPAGNE,    // #F5E0B3 Sunlight Glimmer
                     },
-                    _ => Color::Rgb(136, 192, 208),
+                    _ => palette::NORD_FROST_CYAN,
                 };
 
                 set_cell(buf, px, py, wp.ch, color, nord_bg);
@@ -460,25 +629,32 @@ fn render_leaf(
         let color = if leaf.layer == ParallaxLayer::Background {
             // Background leaves have subtle atmospheric distance shading
             match mood {
-                Mood::Night => Color::Rgb(94, 129, 172),  // Nord10 Deep Arctic Blue
-                Mood::Day => Color::Rgb(143, 188, 187),   // Nord7 Frost Teal
+                Mood::Night => palette::ARCTIC_BLUE,       // #5E81AC Deep Arctic Blue
+                Mood::Day => palette::SEA_TEAL,           // #6F9E9D Sea Teal
             }
         } else if leaf.state == LeafState::Falling {
-            // Foreground dynamic altitude gradient shading as petals drift downward
+            // Foreground dynamic 4-tier altitude gradient shading as petals drift downward
             let progress = (py as f32 / ground_y.max(1) as f32).clamp(0.0, 1.0);
             if progress > 0.85 {
                 match season {
-                    Season::Spring | Season::Auto => Color::Rgb(216, 222, 233), // Nord4 Snow Storm
-                    Season::Summer => Color::Rgb(229, 233, 240), // Nord5 Snow
-                    Season::Autumn => Color::Rgb(235, 203, 139), // Nord13 Amber
-                    Season::Winter => Color::Rgb(236, 239, 244), // Nord6 Snow
+                    Season::Spring | Season::Auto => palette::SAKURA_MIST,   // #D8BFD4 Radiant Blossom
+                    Season::Summer => palette::GOLD_CHAMPAGNE,               // #F5E0B3 Champagne Sun
+                    Season::Autumn => palette::HONEY_GOLD,                   // #DFC07C Honey Gold
+                    Season::Winter => palette::SNOW_WHITE,                   // #ECEFF4 Pure Snow
                 }
-            } else if progress > 0.45 {
+            } else if progress > 0.55 {
                 match season {
-                    Season::Spring | Season::Auto => Color::Rgb(136, 192, 208), // Nord8 Frost Cyan
-                    Season::Summer => Color::Rgb(143, 188, 187), // Nord7 Frost Teal
-                    Season::Autumn => Color::Rgb(208, 135, 112), // Nord12 Coral Orange
-                    Season::Winter => Color::Rgb(136, 192, 208), // Nord8 Frost Cyan
+                    Season::Spring | Season::Auto => palette::WISTERIA_VIOLET, // #9D92BD Wisteria Violet
+                    Season::Summer => palette::AURORA_YELLOW,                // #EBCB8B Aurora Amber
+                    Season::Autumn => palette::GOLDEN_OCHRE,                 // #C9A65D Golden Ochre
+                    Season::Winter => palette::GLACIAL_MIST,                 // #C2E5E4 Glacial Mist
+                }
+            } else if progress > 0.25 {
+                match season {
+                    Season::Spring | Season::Auto => palette::SOFT_FROST_TEAL, // #A8D1D0 Soft Frost Teal
+                    Season::Summer => palette::NORD_FROST_TEAL,               // #8FBCBB Frost Teal
+                    Season::Autumn => palette::AURORA_ORANGE,                 // #D08770 Aurora Coral
+                    Season::Winter => palette::NORD_FROST_CYAN,               // #88BFD0 Frost Cyan
                 }
             } else {
                 base_color
@@ -494,6 +670,8 @@ fn render_leaf(
 fn render_terrain_and_puddles(
     buf: &mut ratatui::buffer::Buffer,
     terrain: &crate::physics::TerrainProfile,
+    floating_petals: &[crate::physics::FloatingPetal],
+    blossom_colors: &[Color],
     area: Rect,
     season: Season,
     mood: Mood,
@@ -524,8 +702,8 @@ fn render_terrain_and_puddles(
             };
 
             let ground_color = match mood {
-                Mood::Night => Color::Rgb(76, 86, 106),  // Nord3 Polar Night Slate (#4C566A)
-                Mood::Day => Color::Rgb(67, 76, 94),    // Nord2 Deep Slate (#434C5E)
+                Mood::Night => palette::POLAR_SLATE_BRIGHT, // #4C566A Polar Night Slate
+                Mood::Day => palette::POLAR_SLATE_MED,      // #434C5E Deep Slate
             };
 
             set_cell(buf, x, gy, ch, ground_color, nord_bg);
@@ -535,12 +713,12 @@ fn render_terrain_and_puddles(
     // 2. Render Grass Tufts along Terrain Contour
     let grass_color = match season {
         Season::Spring | Season::Auto => match mood {
-            Mood::Night => Color::Rgb(143, 188, 187), // Nord7 Frost Teal
-            Mood::Day => Color::Rgb(163, 190, 140),   // Nord14 Aurora Green
+            Mood::Night => palette::WISTERIA_VIOLET, // #9D92BD Wisteria
+            Mood::Day => palette::AURORA_GREEN,     // #A3BE8C Lush Green
         },
-        Season::Summer => Color::Rgb(163, 190, 140),  // Nord14 Lush Green
-        Season::Autumn => Color::Rgb(208, 135, 112),  // Nord12 Coral Amber
-        Season::Winter => Color::Rgb(136, 192, 208),  // Nord8 Frost Cyan
+        Season::Summer => palette::AURORA_GREEN,    // #A3BE8C Lush Green
+        Season::Autumn => palette::GOLDEN_OCHRE,    // #C9A65D Golden Ochre
+        Season::Winter => palette::GLACIAL_MIST,    // #C2E5E4 Glacial Mist
     };
 
     for tuft in &terrain.grass_tufts {
@@ -563,15 +741,36 @@ fn render_terrain_and_puddles(
                 if gy < height_limit {
                     let wave_phase = (x as f32 * 0.45 + time * 3.5).sin();
                     let (puddle_ch, puddle_col) = if wave_phase > 0.6 {
-                        ('≈', Color::Rgb(136, 192, 208)) // Nord8 Frost Cyan (Active ripple)
-                    } else if wave_phase > 0.0 {
-                        ('~', Color::Rgb(129, 161, 193)) // Nord9 Glacial Blue
+                        ('≈', palette::GLACIAL_MIST)    // #C2E5E4 Active ripple crest
+                    } else if wave_phase > 0.2 {
+                        ('~', palette::NORD_FROST_CYAN) // #88BFD0 Frost Cyan
+                    } else if wave_phase > -0.3 {
+                        ('~', palette::GLACIAL_BLUE)    // #81A1C1 Glacial Blue
                     } else {
-                        ('=', Color::Rgb(94, 129, 172))  // Nord10 Deep Arctic Blue
+                        ('=', palette::ARCTIC_BLUE)     // #5E81AC Deep Arctic Blue
                     };
 
                     set_cell(buf, x, gy, puddle_ch, puddle_col, nord_bg);
                 }
+            }
+        }
+
+        // 4. Render Floating Blossom Petals on Puddles
+        for fp in floating_petals {
+            let px = fp.x.round() as u16;
+            let py = fp.y;
+            if px < width && py < height_limit {
+                let bob = fp.bob_phase.sin() > 0.0;
+                let ch = if bob { fp.ch } else { '~' };
+                let frac = 1.0 - (fp.life / fp.max_life.max(0.1));
+                let color = if frac > 0.60 {
+                    blossom_colors[fp.color_idx % blossom_colors.len()]
+                } else if frac > 0.30 {
+                    palette::SOFT_FROST_TEAL // #A8D1D0
+                } else {
+                    palette::NORD_FROST_CYAN // #88BFD0
+                };
+                set_cell(buf, px, py, ch, color, nord_bg);
             }
         }
     }
@@ -607,16 +806,16 @@ fn compute_tree_char_color(
         // Distinct Nord Slate / Bark Palette for the main trunk with vertical grounding
         match ch {
             '%' | '#' | '@' => match mood {
-                Mood::Night => Color::Rgb(76, 86, 106),   // Nord3 Polar Night Slate Bark (#4C566A)
-                Mood::Day => Color::Rgb(67, 76, 94),     // Nord2 Deep Slate (#434C5E)
+                Mood::Night => palette::POLAR_SLATE_BRIGHT, // #4C566A Polar Slate Bark
+                Mood::Day => palette::POLAR_SLATE_MED,      // #434C5E Deep Slate
             },
             '*' | '+' | '=' => match mood {
-                Mood::Night => Color::Rgb(94, 129, 172),  // Nord10 Deep Arctic Blue (#5E81AC)
-                Mood::Day => Color::Rgb(76, 86, 106),    // Nord3 Slate Bark (#4C566A)
+                Mood::Night => palette::ARCTIC_BLUE,        // #5E81AC Deep Arctic Blue Bark
+                Mood::Day => palette::PINE_TEAL,           // #527E7D Pine Teal Bark
             },
             _ => match mood {
-                Mood::Night => Color::Rgb(129, 161, 193), // Nord9 Glacial Blue Bark Highlight (#81A1C1)
-                Mood::Day => Color::Rgb(143, 188, 187),   // Nord7 Frost Teal Bark Highlight (#8FBCBB)
+                Mood::Night => palette::GLACIAL_BLUE,       // #81A1C1 Glacial Blue Highlight
+                Mood::Day => palette::NORD_FROST_TEAL,     // #8FBCBB Frost Teal Highlight
             },
         }
     } else if is_lower_branches {
@@ -624,33 +823,33 @@ fn compute_tree_char_color(
         match season {
             Season::Spring | Season::Auto => match ch {
                 '%' | '#' | '@' => match mood {
-                    Mood::Night => Color::Rgb(94, 129, 172),  // Nord10 Deep Arctic Blue
-                    Mood::Day => Color::Rgb(129, 161, 193),   // Nord9 Glacial Blue
+                    Mood::Night => palette::SHADOW_PLUM,    // #664961 Deep Shadow Plum
+                    Mood::Day => palette::ARCTIC_BLUE,      // #5E81AC Arctic Blue
                 },
                 '*' | '+' | '=' => match mood {
-                    Mood::Night => Color::Rgb(180, 142, 173), // Nord15 Nordic Sakura Pink
-                    Mood::Day => Color::Rgb(143, 188, 187),   // Nord7 Frost Teal
+                    Mood::Night => palette::DUSK_MAUVE,     // #8F6C89 Dusk Mauve
+                    Mood::Day => palette::WISTERIA_VIOLET,  // #9D92BD Wisteria Violet
                 },
-                _ => Color::Rgb(216, 222, 233),                // Nord4 Snow Storm
+                _ => palette::SAKURA_MIST,                  // #D8BFD4 Sakura Mist
             },
             Season::Summer => match ch {
-                '%' | '#' | '@' => Color::Rgb(163, 190, 140),  // Nord14 Aurora Green
-                '*' | '+' | '=' => Color::Rgb(235, 203, 139),  // Nord13 Amber Gold
-                _ => Color::Rgb(143, 188, 187),                // Nord7 Frost Teal
+                '%' | '#' | '@' => palette::PINE_TEAL,      // #527E7D Pine Teal
+                '*' | '+' | '=' => palette::AURORA_GREEN,   // #A3BE8C Lush Aurora Green
+                _ => palette::HONEY_GOLD,                   // #DFC07C Honey Gold
             },
             Season::Autumn => match ch {
-                '%' | '#' | '@' => Color::Rgb(191, 97, 106),   // Nord11 Aurora Red
-                '*' | '+' | '=' => Color::Rgb(208, 135, 112),  // Nord12 Aurora Orange
-                _ => Color::Rgb(235, 203, 139),                // Nord13 Amber Gold
+                '%' | '#' | '@' => palette::AMBER_BRONZE,   // #A3813D Deep Bronze Amber
+                '*' | '+' | '=' => palette::AURORA_RED,     // #BF616A Aurora Crimson
+                _ => palette::GOLDEN_OCHRE,                 // #C9A65D Golden Ochre
             },
             Season::Winter => match ch {
-                '%' | '#' | '@' => Color::Rgb(94, 129, 172),   // Nord10 Deep Arctic Blue
-                '*' | '+' | '=' => Color::Rgb(136, 192, 208),  // Nord8 Frost Cyan
-                _ => Color::Rgb(236, 239, 244),                // Nord6 Pure Snow White
+                '%' | '#' | '@' => palette::ARCTIC_BLUE,    // #5E81AC Deep Arctic Blue
+                '*' | '+' | '=' => palette::SEA_TEAL,       // #6F9E9D Sea Teal
+                _ => palette::GLACIAL_MIST,                 // #C2E5E4 Glacial Mist
             },
         }
     } else {
-        // TrueColor 3D Radial Foliage Depth & Canopy Glow Model
+        // TrueColor 3D Radial Foliage Depth & Canopy Glow Model with 4-stop gradient
         let center_r = (total_rows as f32 * 0.28).max(1.0);
         let center_c = (total_cols as f32 * 0.50).max(1.0);
         let radius_r = (total_rows as f32 * 0.26).max(1.0);
@@ -668,66 +867,76 @@ fn compute_tree_char_color(
 
         let depth = (radial_dist * 0.65 + char_weight * 0.35).clamp(0.0, 1.0);
 
-        let (core, mid, glow) = match season {
+        let (c0, c1, c2, c3) = match season {
             Season::Spring | Season::Auto => match mood {
                 Mood::Night => (
-                    Color::Rgb(94, 129, 172),   // Nord10 Deep Arctic Plum Core (#5E81AC)
-                    Color::Rgb(180, 142, 173),  // Nord15 Nordic Sakura Pink Mid (#B48EAD)
-                    Color::Rgb(236, 239, 244),  // Nord6 Pure Radiant Snow Glow (#ECEFF4)
+                    palette::SHADOW_PLUM,     // #664961 Core Deep Shadow Plum
+                    palette::DUSK_MAUVE,      // #8F6C89 Mid-low Heather Mauve
+                    palette::BLOSSOM_ROSE,    // #C28B9F Mid-high Blossom Rose
+                    palette::SAKURA_MIST,     // #D8BFD4 Outer Radiant Sakura Mist
                 ),
                 Mood::Day => (
-                    Color::Rgb(129, 161, 193),  // Nord9 Glacial Blue
-                    Color::Rgb(180, 142, 173),  // Nord15 Sakura Pink
-                    Color::Rgb(236, 239, 244),  // Nord6 Snow Storm
+                    palette::ARCTIC_BLUE,     // #5E81AC Core Glacial Shadow
+                    palette::SAKURA_PURPLE,   // #B48EAD Mid Sakura Pink
+                    palette::SAKURA_MIST,     // #D8BFD4 Outer Sakura Mist
+                    palette::SNOW_WHITE,      // #ECEFF4 Pure Snow Radiant Glow
                 ),
             },
             Season::Summer => match mood {
                 Mood::Night => (
-                    Color::Rgb(76, 86, 106),    // Nord3 Polar Night Slate Core
-                    Color::Rgb(163, 190, 140),  // Nord14 Lush Aurora Green Mid
-                    Color::Rgb(235, 203, 139),  // Nord13 Amber Sunlight Glow
+                    palette::PINE_TEAL,       // #527E7D Core Deep Pine Teal
+                    palette::SEA_TEAL,        // #6F9E9D Mid-low Sea Teal
+                    palette::AURORA_GREEN,    // #A3BE8C Mid-high Lush Green
+                    palette::HONEY_GOLD,      // #DFC07C Outer Amber Sunlight
                 ),
                 Mood::Day => (
-                    Color::Rgb(94, 129, 172),   // Nord10 Arctic Blue
-                    Color::Rgb(163, 190, 140),  // Nord14 Aurora Green
-                    Color::Rgb(235, 203, 139),  // Nord13 Warm Gold Glow
+                    palette::PINE_TEAL,       // #527E7D Core Pine Teal
+                    palette::AURORA_GREEN,    // #A3BE8C Mid Lush Green
+                    palette::HONEY_GOLD,      // #DFC07C Outer Honey Gold
+                    palette::GOLD_CHAMPAGNE,  // #F5E0B3 Radiant Sun Glow
                 ),
             },
             Season::Autumn => match mood {
                 Mood::Night => (
-                    Color::Rgb(180, 142, 173),  // Nord15 Deep Wine Core
-                    Color::Rgb(191, 97, 106),   // Nord11 Aurora Crimson Mid
-                    Color::Rgb(235, 203, 139),  // Nord13 Golden Amber Glow
+                    palette::AMBER_BRONZE,    // #A3813D Core Bronze Amber
+                    palette::AURORA_RED,      // #BF616A Mid-low Crimson
+                    palette::AURORA_ORANGE,   // #D08770 Mid-high Coral
+                    palette::HONEY_GOLD,      // #DFC07C Outer Golden Glow
                 ),
                 Mood::Day => (
-                    Color::Rgb(208, 135, 112),  // Nord12 Aurora Coral
-                    Color::Rgb(191, 97, 106),   // Nord11 Aurora Red
-                    Color::Rgb(235, 203, 139),  // Nord13 Amber Gold Glow
+                    palette::AURORA_RED,      // #BF616A Core Crimson
+                    palette::AURORA_ORANGE,   // #D08770 Mid Coral
+                    palette::GOLDEN_OCHRE,    // #C9A65D Mid Golden Ochre
+                    palette::GOLD_CHAMPAGNE,  // #F5E0B3 Radiant Sunlight Glow
                 ),
             },
             Season::Winter => match mood {
                 Mood::Night => (
-                    Color::Rgb(94, 129, 172),   // Nord10 Deep Arctic Shadow
-                    Color::Rgb(136, 192, 208),  // Nord8 Frost Cyan Mid
-                    Color::Rgb(236, 239, 244),  // Nord6 Pure Ice White Glow
+                    palette::ARCTIC_BLUE,     // #5E81AC Core Deep Arctic
+                    palette::SEA_TEAL,        // #6F9E9D Mid Sea Teal
+                    palette::NORD_FROST_CYAN, // #88BFD0 Mid Frost Cyan
+                    palette::GLACIAL_MIST,    // #C2E5E4 Outer Glacial Glow
                 ),
                 Mood::Day => (
-                    Color::Rgb(129, 161, 193),  // Nord9 Glacial Blue
-                    Color::Rgb(136, 192, 208),  // Nord8 Frost Cyan
-                    Color::Rgb(236, 239, 244),  // Nord6 Pure Snow
+                    palette::GLACIAL_BLUE,    // #81A1C1 Core Glacial
+                    palette::NORD_FROST_CYAN, // #88BFD0 Mid Frost Cyan
+                    palette::GLACIAL_MIST,    // #C2E5E4 Mid Glacial Mist
+                    palette::SNOW_WHITE,      // #ECEFF4 Pure Snow Radiant Glow
                 ),
             },
         };
 
-        if depth < 0.5 {
-            lerp_color(core, mid, depth * 2.0)
+        if depth < 0.33 {
+            lerp_color(c0, c1, depth / 0.33)
+        } else if depth < 0.66 {
+            lerp_color(c1, c2, (depth - 0.33) / 0.33)
         } else {
-            lerp_color(mid, glow, (depth - 0.5) * 2.0)
+            lerp_color(c2, c3, (depth - 0.66) / 0.34)
         }
     }
 }
 
-fn get_effective_season(config: &AppConfig, weather: &WeatherFetcher) -> Season {
+pub fn get_effective_season(config: &AppConfig, weather: &WeatherFetcher) -> Season {
     if config.season != Season::Auto {
         return config.season;
     }
@@ -760,36 +969,47 @@ fn get_effective_season(config: &AppConfig, weather: &WeatherFetcher) -> Season 
 }
 
 fn get_seasonal_colors(season: Season) -> &'static [Color] {
+    use palette::*;
     match season {
-        Season::Spring => &[
-            Color::Rgb(180, 142, 173), // Nord15 Nordic Purple
-            Color::Rgb(136, 192, 208), // Nord8 Frost Cyan
-            Color::Rgb(236, 239, 244), // Nord6 Snow White
-            Color::Rgb(143, 188, 187), // Nord7 Frost Teal
+        Season::Spring | Season::Auto => &[
+            SAKURA_MIST,       // #D8BFD4 Radiant Blossom Mist
+            SAKURA_PURPLE,     // #B48EAD Nordic Sakura Pink
+            BLOSSOM_ROSE,      // #C28B9F Blossom Rose
+            WISTERIA_VIOLET,   // #9D92BD Wisteria Violet
+            SOFT_FROST_TEAL,   // #A8D1D0 Soft Frost Teal
+            NORD_FROST_CYAN,   // #88BFD0 Frost Cyan
+            GLACIAL_MIST,      // #C2E5E4 Glacial Mist
+            SNOW_WHITE,        // #ECEFF4 Pure Snow White
         ],
         Season::Summer => &[
-            Color::Rgb(163, 190, 140), // Nord14 Aurora Green
-            Color::Rgb(235, 203, 139), // Nord13 Warm Gold
-            Color::Rgb(136, 192, 208), // Nord8 Frost Cyan
-            Color::Rgb(143, 188, 187), // Nord7 Frost Teal
+            AURORA_GREEN,      // #A3BE8C Lush Aurora Green
+            GOLD_CHAMPAGNE,    // #F5E0B3 Champagne Sun
+            HONEY_GOLD,        // #DFC07C Honey Gold
+            AURORA_YELLOW,     // #EBCB8B Warm Amber
+            SOFT_FROST_TEAL,   // #A8D1D0 Soft Frost
+            NORD_FROST_TEAL,   // #8FBCBB Frost Teal
+            SEA_TEAL,          // #6F9E9D Sea Teal
+            NORD_FROST_CYAN,   // #88BFD0 Frost Cyan
         ],
         Season::Autumn => &[
-            Color::Rgb(235, 203, 139), // Nord13 Amber Gold
-            Color::Rgb(191, 97, 106),  // Nord11 Aurora Red
-            Color::Rgb(208, 135, 112), // Nord12 Aurora Orange
-            Color::Rgb(180, 142, 173), // Nord15 Purple
+            GOLD_CHAMPAGNE,    // #F5E0B3 Golden Sunlight
+            HONEY_GOLD,        // #DFC07C Honey Gold
+            AURORA_YELLOW,     // #EBCB8B Amber Gold
+            GOLDEN_OCHRE,      // #C9A65D Golden Ochre
+            AURORA_ORANGE,     // #D08770 Aurora Coral
+            AURORA_RED,        // #BF616A Aurora Crimson
+            AMBER_BRONZE,      // #A3813D Deep Bronze
+            DUSK_MAUVE,        // #8F6C89 Wine Mauve
         ],
         Season::Winter => &[
-            Color::Rgb(136, 192, 208), // Frost Cyan
-            Color::Rgb(236, 239, 244), // Snow White
-            Color::Rgb(94, 129, 172),  // Deep Arctic Blue
-            Color::Rgb(143, 188, 187), // Frost Teal
-        ],
-        Season::Auto => &[
-            Color::Rgb(180, 142, 173),
-            Color::Rgb(136, 192, 208),
-            Color::Rgb(236, 239, 244),
-            Color::Rgb(143, 188, 187),
+            SNOW_WHITE,        // #ECEFF4 Pure Snow
+            SNOW_STORM,        // #E5E9F0 Snow Storm
+            GLACIAL_MIST,      // #C2E5E4 Glacial Mist
+            SOFT_FROST_TEAL,   // #A8D1D0 Soft Cyan
+            NORD_FROST_CYAN,   // #88BFD0 Frost Cyan
+            GLACIAL_BLUE,      // #81A1C1 Glacial Blue
+            SEA_TEAL,          // #6F9E9D Deep Frost
+            ARCTIC_BLUE,       // #5E81AC Deep Arctic
         ],
     }
 }
@@ -803,7 +1023,7 @@ fn render_about_modal(f: &mut Frame, area: Rect, _config: &AppConfig) {
         ("r", "Refresh Live Weather Data"),
         ("g", "Trigger Wind Gust Surge"),
         ("a, ?", "Toggle About Overlay"),
-        ("q, Esc", "Quit Screensaver"),
+        ("q", "Quit Screensaver"),
     ];
 
     let is_compact = area.height < 18;
@@ -995,10 +1215,6 @@ fn render_weather_modal(f: &mut Frame, area: Rect, weather: &WeatherFetcher, _co
                 ));
             }
             lines.push(Line::from(temp_spans));
-
-            if !is_compact {
-                lines.push(Line::from(""));
-            }
         }
     } else {
         lines.push(
@@ -1007,25 +1223,7 @@ fn render_weather_modal(f: &mut Frame, area: Rect, weather: &WeatherFetcher, _co
             ])
             .alignment(Alignment::Center),
         );
-        if !is_compact {
-            lines.push(Line::from(""));
-        }
     }
-
-    // 6. Navigation Footer
-    lines.push(
-        Line::from(vec![
-            Span::styled("f", Style::default().fg(Color::Rgb(94, 129, 172)).add_modifier(Modifier::BOLD)),
-            Span::styled("  Close Forecast", Style::default().fg(Color::Rgb(229, 233, 240))),
-            Span::styled("   *   ", Style::default().fg(Color::Rgb(94, 129, 172))),
-            Span::styled("r", Style::default().fg(Color::Rgb(94, 129, 172)).add_modifier(Modifier::BOLD)),
-            Span::styled("  Refresh Telemetry", Style::default().fg(Color::Rgb(229, 233, 240))),
-            Span::styled("   *   ", Style::default().fg(Color::Rgb(94, 129, 172))),
-            Span::styled("q, Esc", Style::default().fg(Color::Rgb(94, 129, 172)).add_modifier(Modifier::BOLD)),
-            Span::styled("  Exit Screensaver", Style::default().fg(Color::Rgb(229, 233, 240))),
-        ])
-        .alignment(Alignment::Center),
-    );
 
     let modal_width = 76.min(area.width.saturating_sub(4));
     let modal_height = (lines.len() as u16 + 2).min(area.height.saturating_sub(2));
@@ -1052,7 +1250,7 @@ fn compute_tree_row_sway(
     gust_direction: f32,
 ) -> (f32, f32) {
     let trunk_threshold = (art_height * 65) / 100;
-    if r >= trunk_threshold {
+    if r >= trunk_threshold || trunk_threshold == 0 {
         return (0.0, 0.0);
     }
     let h_frac = (1.0 - (r as f32 / trunk_threshold as f32)).clamp(0.0, 1.0);
@@ -1075,11 +1273,49 @@ fn compute_char_sway(
         return 0;
     }
     let center_c = (art_width as f32) * 0.5;
-    let dist_c = ((c as f32 - center_c).abs() / center_c.max(1.0)).clamp(0.0, 1.0);
+    let inv_center_c = 1.0 / center_c.max(1.0);
+    let dist_c = ((c as f32 - center_c).abs() * inv_center_c).clamp(0.0, 1.0);
     let tip_flutter = if dist_c > 0.25 {
-        (time * 3.0 + (r * 5 + c) as f32 * 0.25).sin() * (0.45 * sway * dist_c * h_frac)
+        let flutter_phase = time * 3.0 + (r.wrapping_mul(5).wrapping_add(c)) as f32 * 0.25;
+        flutter_phase.sin() * (0.45 * sway * dist_c * h_frac)
     } else {
         0.0
     };
     (row_base_sway + tip_flutter).round().clamp(-2.0, 2.0) as i32
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_tree_color_cache() {
+        let mut cache = TreeColorCache::default();
+        let grid = vec![vec!['#', ' ', '*']];
+        let colors1 = cache.get_or_compute(&grid, Season::Spring, Mood::Night).to_vec();
+        assert_eq!(colors1.len(), 1);
+        assert_eq!(colors1[0].len(), 3);
+        assert_eq!(colors1[0][1], Color::Reset);
+
+        // Fetching again with same parameters uses cache
+        let colors2 = cache.get_or_compute(&grid, Season::Spring, Mood::Night);
+        assert_eq!(colors1[0], colors2[0]);
+    }
+
+    #[test]
+    fn test_sway_computations_edge_cases() {
+        // Zero art dimensions should not panic
+        let (row_sway, h_frac) = compute_tree_row_sway(0, 0, 0.0, 1.0, 0.0, 1.0);
+        assert_eq!(row_sway, 0.0);
+        assert_eq!(h_frac, 0.0);
+
+        let char_sway = compute_char_sway(0.0, 0.0, 0, 0, 0, 0.0, 1.0);
+        assert_eq!(char_sway, 0);
+
+        // Normal sway values
+        let (row_sway_normal, h_frac_normal) = compute_tree_row_sway(5, 50, 1.0, 1.0, 0.5, 1.0);
+        assert!(h_frac_normal > 0.0);
+        let char_sway_normal = compute_char_sway(row_sway_normal, h_frac_normal, 5, 20, 80, 1.0, 1.0);
+        assert!((-2..=2).contains(&char_sway_normal));
+    }
 }
